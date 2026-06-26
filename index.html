@@ -1,0 +1,2484 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>班級親師互動網</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Noto Sans TC 字體 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<!-- Firebase v8 (Compat) SDK，使用 CDN 載入，方便單檔部署 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+<style>
+  * { font-family: 'Noto Sans TC', system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+
+  /* ── 華麗淡色系漸層背景 ── */
+  body {
+    background: linear-gradient(135deg, #eef2ff 0%, #fae8ff 35%, #e0f2fe 70%, #ecfdf5 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: #334155;
+  }
+
+  /* ════════ 3D 卡片：各功能區塊不同淡色系 ════════ */
+  .card-3d {
+    position: relative;
+    border-radius: 26px;
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--c2, #fff), var(--c1, #f1f5f9));
+    border: 1px solid rgba(255,255,255,.75);
+    box-shadow:
+      0 18px 40px -16px var(--shadow, rgba(0,0,0,.18)),
+      0 6px 12px -6px rgba(0,0,0,.06),
+      inset 0 2px 0 rgba(255,255,255,.95),
+      inset 0 -3px 8px rgba(0,0,0,.03);
+    transition: transform .35s cubic-bezier(.2,.8,.3,1), box-shadow .35s;
+  }
+  .card-3d:hover {
+    transform: translateY(-5px) scale(1.005);
+    box-shadow:
+      0 28px 55px -18px var(--shadow, rgba(0,0,0,.22)),
+      0 12px 22px -8px rgba(0,0,0,.08),
+      inset 0 2px 0 rgba(255,255,255,.95),
+      inset 0 -3px 8px rgba(0,0,0,.03);
+  }
+  /* 卡片頂部彩色光條 */
+  .card-3d::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .card-head {
+    display: flex; align-items: center; gap: .8rem;
+    padding: 1.05rem 1.3rem .9rem;
+    border-bottom: 1px solid rgba(255,255,255,.7);
+  }
+  .head-icon {
+    width: 46px; height: 46px; border-radius: 16px;
+    display: grid; place-items: center; font-size: 23px; flex-shrink: 0;
+    background: linear-gradient(145deg, #ffffff, var(--c1));
+    box-shadow:
+      0 8px 14px -5px var(--shadow),
+      inset 0 -3px 5px rgba(0,0,0,.06),
+      inset 0 2px 3px rgba(255,255,255,.95);
+  }
+  .card-title { font-weight: 800; font-size: 1.06rem; color: var(--accent); letter-spacing: .5px; }
+  .card-body { padding: 1.25rem; }
+  .locked-msg { text-align: center; color: #94a3b8; padding: 2rem 0; font-size: .875rem; }
+
+  /* 各功能區塊配色 */
+  .theme-sky     { --c1:#dbeafe; --c2:#f5faff; --accent:#0369a1; --accent2:#38bdf8; --shadow:rgba(56,189,248,.32); }
+  .theme-violet  { --c1:#ede9fe; --c2:#faf8ff; --accent:#6d28d9; --accent2:#a78bfa; --shadow:rgba(167,139,250,.32); }
+  .theme-rose    { --c1:#ffe4e6; --c2:#fff5f6; --accent:#be123c; --accent2:#fb7185; --shadow:rgba(251,113,133,.32); }
+  .theme-emerald { --c1:#d1fae5; --c2:#f3fdf8; --accent:#047857; --accent2:#34d399; --shadow:rgba(52,211,153,.32); }
+  .theme-amber   { --c1:#fef3c7; --c2:#fffdf3; --accent:#b45309; --accent2:#fbbf24; --shadow:rgba(251,191,36,.34); }
+
+  /* ════════ 3D 按鈕 ════════ */
+  .btn3d {
+    border: none; cursor: pointer; color: #fff; font-weight: 700;
+    border-radius: 15px; padding: .65rem 1.15rem; position: relative;
+    transition: transform .1s ease, box-shadow .1s ease, filter .15s;
+  }
+  .btn3d:hover { filter: brightness(1.05); }
+  .btn3d:active { transform: translateY(4px); }
+  .b-blue    { background: linear-gradient(180deg,#60a5fa,#3b82f6); box-shadow: 0 5px 0 #1d4ed8, 0 9px 16px -3px rgba(37,99,235,.45); }
+  .b-blue:active    { box-shadow: 0 1px 0 #1d4ed8, 0 3px 8px -3px rgba(37,99,235,.45); }
+  .b-amber   { background: linear-gradient(180deg,#fbbf24,#f59e0b); box-shadow: 0 5px 0 #b45309, 0 9px 16px -3px rgba(245,158,11,.45); }
+  .b-amber:active   { box-shadow: 0 1px 0 #b45309; }
+  .b-emerald { background: linear-gradient(180deg,#34d399,#10b981); box-shadow: 0 5px 0 #047857, 0 9px 16px -3px rgba(16,185,129,.45); }
+  .b-emerald:active { box-shadow: 0 1px 0 #047857; }
+  .b-rose    { background: linear-gradient(180deg,#fb7185,#f43f5e); box-shadow: 0 5px 0 #be123c, 0 9px 16px -3px rgba(244,63,94,.45); }
+  .b-rose:active    { box-shadow: 0 1px 0 #be123c; }
+  .b-slate   { background: linear-gradient(180deg,#475569,#334155); box-shadow: 0 5px 0 #1e293b, 0 9px 16px -3px rgba(51,65,85,.4); }
+  .b-slate:active   { box-shadow: 0 1px 0 #1e293b; }
+  .b-indigo  { background: linear-gradient(180deg,#818cf8,#6366f1); box-shadow: 0 5px 0 #4338ca, 0 9px 16px -3px rgba(99,102,241,.45); }
+  .b-indigo:active  { box-shadow: 0 1px 0 #4338ca; }
+
+  /* 玻璃擬態頂欄 */
+  .glass-nav {
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 4px 20px -8px rgba(0,0,0,.12);
+    border-bottom: 1px solid rgba(255,255,255,.6);
+  }
+  .brand-pill {
+    background: linear-gradient(145deg,#818cf8,#6366f1);
+    box-shadow: 0 6px 12px -3px rgba(99,102,241,.5), inset 0 2px 2px rgba(255,255,255,.4);
+  }
+
+  /* 模態視窗動畫 */
+  .modal-backdrop { animation: fadeIn .18s ease; }
+  .modal-card { animation: popIn .25s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes popIn { from { opacity: 0; transform: translateY(20px) scale(.94) } to { opacity: 1; transform: none } }
+  .toast-item { animation: toastIn .25s ease, toastOut .3s ease forwards; animation-delay: 0s, 2.7s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-14px) } to { opacity: 1; transform: none } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(-14px) } }
+
+  /* 富文本內容樣式 */
+  .rich-content a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  .rich-content ul { list-style: disc; padding-left: 1.25rem; }
+  .rich-content ol { list-style: decimal; padding-left: 1.25rem; }
+  .rich-content b, .rich-content strong { font-weight: 700; }
+
+  /* ════════ 聯絡簿美化呈現 ════════ */
+  .cb-head { font-weight: 800; color: #0369a1; font-size: .98rem; margin: .7rem 0 .4rem; display: flex; align-items: center; gap: .4rem; }
+  .cb-head::before { content: "📌"; font-size: .9em; }
+  .cb-head:first-child { margin-top: 0; }
+  .cb-item {
+    display: flex; align-items: flex-start; gap: .7rem;
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #bae6fd; border-radius: 14px;
+    padding: .7rem .9rem; margin: .5rem 0;
+    box-shadow: 0 3px 8px -4px rgba(56,189,248,.45), inset 0 1px 0 rgba(255,255,255,.8);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .cb-item:hover { transform: translateX(4px); box-shadow: 0 6px 14px -5px rgba(56,189,248,.55); }
+  .cb-num {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(145deg, #38bdf8, #0284c7); color: #fff;
+    font-weight: 800; font-size: .82rem; display: grid; place-items: center;
+    box-shadow: 0 2px 5px rgba(2,132,199,.45), inset 0 1px 1px rgba(255,255,255,.5);
+  }
+  .cb-text { font-size: .97rem; line-height: 1.55; padding-top: 2px; }
+  .cb-text a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  .cb-para { font-size: .92rem; line-height: 1.65; color: #475569; margin: .35rem 0; }
+  .cb-para a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  /* 聯絡簿主畫面左右二欄 */
+  .cb-cols { column-count: 2; column-gap: .8rem; }
+  .cb-cols .cb-item, .cb-cols .cb-head, .cb-cols .cb-para { break-inside: avoid; -webkit-column-break-inside: avoid; }
+  .cb-cols .cb-item { margin-top: 0; }
+  @media (max-width: 480px) { .cb-cols { column-gap: .5rem; } }
+  /* 全螢幕放大版（方便抄寫）；尺寸以 em 為單位，可由 A-/A+ 調整容器基準字級 */
+  .cb-big { font-size: 36px; }
+  .cb-big .cb-item { padding: .55em .75em; margin: .45em 0; border-radius: .55em; gap: .6em; }
+  .cb-big .cb-num { width: 1.5em; height: 1.5em; font-size: .9em; }
+  .cb-big .cb-text { font-size: 1em; line-height: 1.55; }
+  .cb-big .cb-head { font-size: 1em; margin: .7em 0 .35em; }
+  .cb-big .cb-para { font-size: .9em; line-height: 1.65; }
+
+  /* ════════ 資源充電站卡片 ════════ */
+  .res-card {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    min-height: 56px; padding: .6rem .7rem; border-radius: 14px; font-weight: 700; font-size: .92rem;
+    color: #065f46; background: linear-gradient(145deg, #ecfdf5, #a7f3d0);
+    border: 1px solid rgba(255,255,255,.7); line-height: 1.3; word-break: break-word;
+    box-shadow: 0 4px 10px -4px rgba(16,185,129,.45), inset 0 1px 0 rgba(255,255,255,.85);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .res-card:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 9px 18px -5px rgba(16,185,129,.55); }
+  /* ════════ 小考成績卡片 ════════ */
+  .quiz-score { background: linear-gradient(145deg, #fffbeb, #fde68a); border: 1px solid rgba(255,255,255,.7); border-radius: 14px; padding: .75rem; text-align: center; box-shadow: 0 3px 8px -4px rgba(251,191,36,.5), inset 0 1px 0 rgba(255,255,255,.85); }
+  .qs-sub { font-size: .8rem; color: #92400e; font-weight: 700; margin-bottom: .25rem; }
+  .qs-val { font-size: 1.6rem; font-weight: 900; color: #b45309; line-height: 1; }
+
+  /* ════════ 作業檢核表格 ════════ */
+  .hw-table { border-collapse: separate; border-spacing: 5px; }
+  .hw-th-seat, .hw-td-seat {
+    position: sticky; left: 0; z-index: 1;
+    background: rgba(255,255,255,.92); white-space: nowrap;
+    text-align: left; padding: 5px 10px; font-weight: 600; border-radius: 9px;
+    box-shadow: 2px 0 6px -3px rgba(0,0,0,.12);
+  }
+  .hw-th {
+    padding: 5px 10px; font-weight: 600; white-space: nowrap;
+    background: rgba(255,255,255,.7); border-radius: 9px; max-width: 130px; color: #475569;
+  }
+  .hw-row-me .hw-td-seat { background: #fde68a; color: #92400e; }
+  .hw-cell {
+    display: inline-block; border-radius: 9px; padding: 5px 8px; font-size: 11px;
+    font-weight: 700; text-align: center; min-width: 56px; transition: all .15s;
+    box-shadow: inset 0 -2px 3px rgba(0,0,0,.06), inset 0 1px 1px rgba(255,255,255,.7);
+  }
+  .hw-clickable { cursor: pointer; }
+  .hw-clickable:hover { transform: scale(1.08); box-shadow: 0 3px 8px rgba(0,0,0,.18); }
+  .hw-0 { background: #e2e8f0; color: #94a3b8; }
+  .hw-1 { background: #bbf7d0; color: #15803d; }
+  .hw-2 { background: #fde68a; color: #b45309; }
+  .hw-3 { background: #bfdbfe; color: #1d4ed8; }
+  .hw-legend span { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; }
+  .hw-dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ 頂部導覽列 ════════════════════ -->
+<header class="glass-nav sticky top-0 z-30">
+  <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="brand-pill w-10 h-10 rounded-2xl text-white grid place-items-center font-black shrink-0">親</div>
+      <div class="min-w-0">
+        <h1 id="className" class="font-black text-base leading-tight truncate text-slate-700">班級親師互動網</h1>
+        <p class="text-xs text-slate-400 leading-tight">Parent–Teacher Hub</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <span id="loginBadge" class="hidden text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold shadow-sm"></span>
+      <button id="btnLogin" class="btn3d b-indigo text-sm">登入</button>
+      <button id="btnLogout" class="hidden btn3d b-slate text-sm">登出</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- 未設定 Firebase 時的引導區塊 -->
+  <section id="setupGuide" class="hidden card-3d theme-violet text-center">
+    <div class="card-body space-y-4 py-8">
+      <div class="text-6xl">🔧</div>
+      <h2 class="text-2xl font-black text-violet-700">尚未連線資料庫</h2>
+      <p class="text-slate-500 text-sm leading-relaxed">本系統需要連結您自己的 <b>免費 Firebase 專案</b> 才能運作。<br/>請先閱讀說明並完成設定。</p>
+      <div class="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+        <button onclick="openHelp()" class="btn3d b-amber text-base">📖 如何設定 Firebase</button>
+        <button onclick="openSettings()" class="btn3d b-blue text-base">⚙️ 設定 Firebase 連線</button>
+      </div>
+      <p class="text-xs text-slate-400 pt-3">Made by
+        <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener" class="font-bold text-violet-600 underline">阿剛老師</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- 連線狀態列 -->
+  <div id="connBar" class="hidden text-xs text-slate-400 flex items-center justify-between px-1">
+    <span id="connStatus" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> 連線中…</span>
+    <button onclick="openSettings()" class="underline hover:text-slate-600">設定 / 分享</button>
+  </div>
+
+  <!-- ── 功能模組容器 ── -->
+  <div id="moduleArea" class="hidden space-y-6">
+
+    <!-- 1. 每日聯絡簿（天藍色系） -->
+    <section data-module="contactbook" class="card-3d theme-sky">
+      <div class="card-head">
+        <div class="head-icon">📒</div>
+        <h2 class="card-title flex-1">每日聯絡簿 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickContactbook()" class="teacher-only hidden btn3d b-blue text-xs">✏️ 編輯聯絡簿</button>
+        <button onclick="openContactbookFullscreen()" class="text-sm px-2.5 py-1.5 rounded-xl bg-white/70 shadow-inner hover:bg-white" title="放大全螢幕顯示，方便抄寫">🔍 放大</button>
+        <input type="date" id="cbDate" class="text-sm border-0 rounded-xl px-3 py-1.5 bg-white/70 shadow-inner" />
+      </div>
+      <div class="card-body">
+        <div id="cbLocked" class="locked-msg hidden">🔒 此區需登入後查看，請點右上角「登入」。</div>
+        <div id="cbBody">
+          <div id="cbContent" class="rich-content text-sm leading-relaxed text-slate-700 min-h-[2rem]">尚無內容。</div>
+          <div id="cbReadRow" class="hidden mt-4 pt-4 border-t border-white/70 flex items-center justify-between flex-wrap gap-2">
+            <span id="cbReadState" class="text-sm text-slate-500"></span>
+            <button id="cbReadBtn" onclick="markRead()" class="btn3d b-emerald text-sm">✋ 我已閱讀</button>
+          </div>
+        </div>
+        <!-- 教師檢視：家長已讀狀況（免進後台） -->
+        <div id="cbReadReport" class="hidden mt-4 pt-4 border-t border-white/70"></div>
+      </div>
+    </section>
+
+    <!-- 2. 作業檢核即時狀況（琥珀色系） -->
+    <section id="hwSection" class="card-3d theme-amber">
+      <div class="card-head">
+        <div class="head-icon">📝</div>
+        <h2 class="card-title flex-1">今日作業繳交即時狀況</h2>
+        <button onclick="quickHomework()" class="teacher-only hidden btn3d b-amber text-xs">🔄 建立今日檢核</button>
+        <button id="hwInlineBtn" onclick="toggleHwInline()" class="hidden btn3d b-amber text-xs">✏️ 立即檢核</button>
+      </div>
+      <div class="card-body">
+        <div id="hwLocked" class="locked-msg hidden">🔒 此區需登入後查看當日作業繳交情況。</div>
+        <div id="hwViewWrap">
+          <div class="hw-legend text-xs text-slate-500 mb-3">
+            <span><i class="hw-dot hw-0"></i>未繳交</span>
+            <span><i class="hw-dot hw-1"></i>已繳交</span>
+            <span><i class="hw-dot hw-2"></i>待訂正</span>
+            <span><i class="hw-dot hw-3"></i>已訂正</span>
+          </div>
+          <div id="hwViewBox" class="overflow-x-auto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 班級自製日曆（紫羅蘭色系） -->
+    <section data-module="calendar" class="card-3d theme-violet">
+      <div class="card-head">
+        <div class="head-icon">📅</div>
+        <h2 class="card-title flex-1">班級日曆 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickEvent()" class="teacher-only hidden btn3d b-indigo text-xs">➕ 新增活動</button>
+        <div class="flex items-center gap-2">
+          <button onclick="calMove(-1)" class="w-8 h-8 rounded-xl bg-white/70 shadow-inner hover:bg-white">‹</button>
+          <span id="calLabel" class="text-sm font-bold text-violet-700 w-24 text-center"></span>
+          <button onclick="calMove(1)" class="w-8 h-8 rounded-xl bg-white/70 shadow-inner hover:bg-white">›</button>
+        </div>
+      </div>
+      <div class="card-body !p-3">
+        <div id="calLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="calGrid" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
+      </div>
+    </section>
+
+    <!-- 4. 公告與榮譽榜（玫瑰色系） -->
+    <section data-module="announcements" class="card-3d theme-rose">
+      <div class="card-head">
+        <div class="head-icon">📣</div>
+        <h2 class="card-title flex-1">公告與榮譽榜 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickAnnouncement()" class="teacher-only hidden btn3d b-rose text-xs">➕ 新增公告</button>
+      </div>
+      <div class="card-body">
+        <div id="annLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="annList" class="space-y-4"></div>
+      </div>
+    </section>
+
+    <!-- 5. 回條拍照回傳（翠綠色系） -->
+    <section data-module="slips" class="card-3d theme-emerald">
+      <div class="card-head">
+        <div class="head-icon">📎</div>
+        <h2 class="card-title flex-1">紙本回條回傳 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickSlip()" class="teacher-only hidden btn3d b-emerald text-xs">➕ 建立回條</button>
+      </div>
+      <div class="card-body">
+        <div id="slipLocked" class="locked-msg hidden">🔒 此區涉及個資，需登入後查看。</div>
+        <div id="slipList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- 6. 資源充電站（薄荷綠色系） -->
+    <section data-module="resources" class="card-3d theme-emerald">
+      <div class="card-head">
+        <div class="head-icon">⚡</div>
+        <h2 class="card-title flex-1">資源充電站 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickResource()" class="teacher-only hidden btn3d b-emerald text-xs">➕ 新增連結</button>
+      </div>
+      <div class="card-body">
+        <div id="resLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="resList" class="space-y-5"></div>
+      </div>
+    </section>
+
+    <!-- 7. 今日小考成績（琥珀色系） -->
+    <section data-module="quiz" class="card-3d theme-amber">
+      <div class="card-head">
+        <div class="head-icon">📊</div>
+        <h2 class="card-title flex-1">今日小考成績 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickQuiz()" class="teacher-only hidden btn3d b-amber text-xs">➕ 發布成績</button>
+        <select id="quizDate" class="text-sm border-0 rounded-xl px-2 py-1.5 bg-white/70 shadow-inner"></select>
+      </div>
+      <div class="card-body">
+        <div id="quizLocked" class="locked-msg hidden">🔒 此區需登入後查看自己孩子的成績。</div>
+        <div id="quizBox"></div>
+      </div>
+    </section>
+
+    <!-- 不重複訪客統計（以下為固定置底，模組排序的錨點） -->
+    <div id="moduleTail" class="text-center text-xs text-slate-400 pt-1">
+      👁️ 今日不重複觀看：<span id="visitCount" class="font-bold text-slate-500">—</span> 人
+    </div>
+
+    <!-- 老師後台入口 -->
+    <div class="text-center">
+      <button id="btnAdmin" onclick="openAdmin()" class="hidden btn3d b-slate text-sm">🛠️ 進入老師後台</button>
+    </div>
+  </div>
+</main>
+
+<!-- ════════════════════ 頁尾：作者與授權 ════════════════════ -->
+<footer class="max-w-3xl mx-auto px-4 py-8 text-center space-y-2">
+  <div class="text-xs text-slate-400">
+    <button onclick="openHelp()" class="underline hover:text-slate-600">使用說明</button> ·
+    <button onclick="openSettings()" class="underline hover:text-slate-600">系統設定</button>
+  </div>
+  <p class="text-sm text-slate-500">
+    Made by
+    <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener" class="font-black text-indigo-600 hover:text-indigo-700 underline">阿剛老師</a>
+  </p>
+  <p class="text-[11px] text-slate-400 leading-relaxed max-w-md mx-auto">
+    本網頁作品採用
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh_TW" target="_blank" rel="noopener" class="underline hover:text-slate-600">創用 CC「姓名標示-非商業性-相同方式分享 4.0」</a>
+    國際授權條款釋出。歡迎教學非營利使用，使用時請保留作者姓名標示。
+  </p>
+</footer>
+
+<!-- 家長登入後出現的浮動「聯絡老師」按鈕 -->
+<button id="floatContact" onclick="openParentChat()" class="hidden fixed bottom-5 right-5 z-40 btn3d b-indigo !rounded-full w-16 h-16 !p-0 flex items-center justify-center text-2xl shadow-2xl" title="聯絡老師">
+  💬
+  <span id="floatBadge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center">0</span>
+</button>
+
+<!-- 老師登入後出現的浮動「家長私訊」按鈕 -->
+<button id="floatTeacher" onclick="openTeacherInbox()" class="hidden fixed bottom-5 right-5 z-40 btn3d b-indigo !rounded-full w-16 h-16 !p-0 flex items-center justify-center text-2xl shadow-2xl" title="家長私訊">
+  📨
+  <!-- 未讀家長私訊（紅）／未回覆對話（琥珀） -->
+  <span id="ftUnread" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center" title="未讀家長私訊">0</span>
+  <span id="ftUnreplied" class="hidden absolute -top-1 -left-1 bg-amber-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center" title="未回覆對話">0</span>
+</button>
+
+<!-- 模態視窗 / Toast 容器 -->
+<div id="modalRoot"></div>
+<div id="toastRoot" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] space-y-2 w-[90%] max-w-sm pointer-events-none"></div>
+
+<!-- QRCode 產生器（CDN） -->
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   【★ Firebase 設定區 ★】
+   ────────────────────────────────────────────────────────────────
+   使用者請直接修改下方六行引號內的數值，填入您真實的 Firebase 設定即可
+   （無需更動變數名稱或大括號）。
+   若維持 "demo"，程式會改從網址參數或本機設定（LocalStorage）讀取，
+   皆無有效設定時，會進入「主畫面引導」狀態，請點畫面上的「設定」按鈕。
+══════════════════════════════════════════════════════════════════ */
+const firebaseConfig = {
+    apiKey: "demo",
+    authDomain: "demo",
+    projectId: "demo",
+    storageBucket: "demo",
+    messagingSenderId: "demo",
+    appId: "demo"
+};
+
+/* ── LocalStorage 鍵名 ── */
+const LS_CONFIG  = "firebaseConfig";   // 動態設定
+const LS_DEVICE  = "ptHubDeviceId";    // 不重複訪客用裝置 ID
+const LS_SESSION = "ptHubSession";     // 家長登入狀態（記住我）
+
+/* ════════ Toast 通知（取代 alert） ════════ */
+function toast(msg, type = "info") {
+  const colors = { info: "bg-slate-800", success: "bg-emerald-600", error: "bg-rose-600", warn: "bg-amber-600" };
+  const el = document.createElement("div");
+  el.className = `toast-item pointer-events-auto ${colors[type] || colors.info} text-white text-sm px-4 py-3 rounded-2xl shadow-xl`;
+  el.textContent = msg;
+  document.getElementById("toastRoot").appendChild(el);
+  setTimeout(() => el.remove(), 3100);
+}
+
+/* ════════ 通用模態視窗（取代 alert / confirm / prompt） ════════ */
+function showModal(html, opts = {}) {
+  closeModal();
+  const root = document.getElementById("modalRoot");
+  const wrap = document.createElement("div");
+  wrap.className = "modal-backdrop fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto";
+  wrap.innerHTML = `<div class="modal-card bg-white rounded-3xl shadow-2xl w-full ${opts.size || 'max-w-lg'} my-8 max-h-[90vh] overflow-hidden flex flex-col">${html}</div>`;
+  if (!opts.noBackdropClose) wrap.addEventListener("click", e => { if (e.target === wrap) closeModal(); });
+  root.appendChild(wrap);
+  return wrap;
+}
+function closeModal() { document.getElementById("modalRoot").innerHTML = ""; }
+
+/* 自訂確認對話框，回傳 Promise<boolean> */
+function confirmDialog(title, message, { okText = "確定", danger = false } = {}) {
+  return new Promise(resolve => {
+    showModal(`
+      <div class="p-6 space-y-4">
+        <h3 class="text-lg font-bold">${title}</h3>
+        <p class="text-sm text-slate-600 leading-relaxed">${message}</p>
+        <div class="flex gap-3 justify-end pt-2">
+          <button id="cdNo" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200">取消</button>
+          <button id="cdYes" class="btn3d ${danger ? 'b-rose' : 'b-blue'} text-sm">${okText}</button>
+        </div>
+      </div>`, { size: "max-w-sm" });
+    document.getElementById("cdNo").onclick  = () => { closeModal(); resolve(false); };
+    document.getElementById("cdYes").onclick = () => { closeModal(); resolve(true);  };
+  });
+}
+
+/* ════════ 設定來源解析（優先級：網址參數 > 寫死 > LocalStorage） ════════ */
+function isValidConfig(c) {
+  return c && typeof c === "object" && c.apiKey && c.apiKey !== "demo" && c.projectId && c.projectId !== "demo";
+}
+function resolveConfig() {
+  // 優先級 1：網址參數 ?config=BASE64
+  try {
+    const params = new URLSearchParams(location.search);
+    const enc = params.get("config");
+    if (enc) {
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(enc))));
+      if (isValidConfig(decoded)) {
+        localStorage.setItem(LS_CONFIG, JSON.stringify(decoded));        // 覆蓋舊設定
+        window.history.replaceState({}, document.title, location.pathname); // 清除網址參數
+        return decoded;
+      }
+    }
+  } catch (e) { console.warn("網址參數解析失敗", e); }
+
+  // 優先級 2：程式碼寫死
+  if (isValidConfig(firebaseConfig)) return firebaseConfig;
+
+  // 優先級 3：LocalStorage 動態設定
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_CONFIG) || "null");
+    if (isValidConfig(saved)) return saved;
+  } catch (e) {}
+
+  return null; // 未設定
+}
+
+/* ════════ 全域狀態 ════════ */
+let db = null, auth = null, ACTIVE_CONFIG = null;
+let APP_STATE = {
+  config: null, students: [], session: null, isTeacher: false,
+  calMonth: null, calEvents: [],
+};
+const DEFAULT_PERMS = { contactbook: "login", calendar: "public", announcements: "public", slips: "login", resources: "public", quiz: "login" };
+const MODULE_NAMES = { contactbook: "每日聯絡簿", calendar: "班級日曆", announcements: "公告與榮譽榜", slips: "回條拍照回傳", resources: "資源充電站", quiz: "今日小考成績" };
+
+/* 主畫面模組顯示順序（含作業檢核區） */
+const DEFAULT_ORDER = ["contactbook", "homework", "calendar", "announcements", "slips", "resources", "quiz"];
+const ORDER_LABELS = { contactbook: "每日聯絡簿", homework: "作業檢核", calendar: "班級日曆", announcements: "公告與榮譽榜", slips: "回條拍照回傳", resources: "資源充電站", quiz: "今日小考成績" };
+let editOrder = null; // 後台設定面板暫存的排序
+
+/* 作業檢核四狀態 */
+const HW_STATES = [
+  { label: "未繳交" }, { label: "已繳交" }, { label: "待訂正" }, { label: "已訂正" },
+];
+let HW_TODAY = null;
+
+/* 私訊資料（家長 ↔ 老師） */
+let MSG_DATA = [];
+let THREAD_SEAT = null;
+let THREAD_RETURN = null; // 關閉對話串時的返回行為（後台分頁 or 浮動收件匣）
+
+/* 作業檢核：教師主畫面「立即檢核」模式開關 */
+let hwInlineEdit = false;
+
+/* 資源充電站 / 小考成績 */
+let RES_DATA = [];
+let QUIZ_DATES = [];      // 已發布的考試日期清單
+let QUIZ_CUR = null;      // 目前選取日期的成績資料
+let quizCurUnsub = null;
+let QS_CACHE = { subjects: [], scores: {} }; // 後台單筆輸入用：目前日期的科目與成績快取
+
+/* ════════ 啟動流程 ════════ */
+window.addEventListener("DOMContentLoaded", init);
+
+function init() {
+  ACTIVE_CONFIG = resolveConfig();
+  if (!ACTIVE_CONFIG) { document.getElementById("setupGuide").classList.remove("hidden"); return; }
+
+  // ★ 只有 Firebase 初始化成功後，才執行匿名登入 ★
+  try {
+    firebase.initializeApp(ACTIVE_CONFIG);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    document.getElementById("connBar").classList.remove("hidden");
+  } catch (e) {
+    console.error(e);
+    showFatal("Firebase 初始化失敗，請檢查設定是否正確。", e.message);
+    return;
+  }
+
+  auth.signInAnonymously()
+    .then(() => { setConn("ok"); restoreSession(); startApp(); })
+    .catch(err => { console.error(err); setConn("err"); showFatal("匿名登入失敗", err.message + "\n\n請確認 Firebase 主控台已啟用「匿名」登入方式。"); });
+}
+
+function setConn(state) {
+  const el = document.getElementById("connStatus"); if (!el) return;
+  if (state === "ok")  el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> 已連線';
+  if (state === "err") el.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span> 連線失敗';
+}
+function showFatal(title, detail) {
+  document.getElementById("setupGuide").classList.remove("hidden");
+  showModal(`
+    <div class="p-6 space-y-3">
+      <h3 class="text-lg font-bold text-rose-600">⚠️ ${title}</h3>
+      <pre class="text-xs bg-slate-100 p-3 rounded-xl whitespace-pre-wrap text-slate-600">${detail || ""}</pre>
+      <div class="flex justify-end gap-2 pt-1"><button onclick="closeModal();openSettings()" class="btn3d b-blue text-sm">前往設定</button></div>
+    </div>`, { size: "max-w-md" });
+}
+
+/* ════════ 主程式 ════════ */
+function startApp() {
+  document.getElementById("moduleArea").classList.remove("hidden");
+
+  db.collection("classroom").doc("config").onSnapshot(doc => {
+    APP_STATE.config = doc.exists ? doc.data() : { className: "班級親師互動網", perms: { ...DEFAULT_PERMS }, teacherPassword: "" };
+    applyConfigUI(); renderModuleLocks();
+  }, err => console.warn("設定監聽失敗", err));
+
+  db.collection("students").orderBy("seat").onSnapshot(snap => {
+    APP_STATE.students = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    refreshActivePanels();
+  }, err => console.warn("學生監聽失敗", err));
+
+  // 私訊（家長 ↔ 老師）即時監聽
+  db.collection("messages").orderBy("createdAt").onSnapshot(snap => {
+    MSG_DATA = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    onMessagesUpdate();
+  }, err => console.warn("私訊監聽失敗", err));
+
+  setupContactbook();
+  setupHomeworkView();
+  setupCalendar();
+  setupAnnouncements();
+  setupSlips();
+  setupResources();
+  setupQuiz();
+  countVisitor();
+  renderLoginUI();
+}
+
+function applyConfigUI() {
+  const name = APP_STATE.config?.className || "班級親師互動網";
+  document.getElementById("className").textContent = name;
+  document.title = name;
+}
+
+function permOf(mod) { return (APP_STATE.config?.perms?.[mod]) || DEFAULT_PERMS[mod] || "public"; }
+function canView(mod) { const p = permOf(mod); if (p === "off") return false; return p === "public" || isLoggedIn(); }
+function isLoggedIn() { return !!APP_STATE.session || APP_STATE.isTeacher; }
+
+/* 模組是否要在主畫面呈現：關閉→不顯示；需登入且未登入→不顯示；公開→顯示 */
+function moduleVisible(mod) {
+  const p = permOf(mod);
+  if (p === "off") return false;
+  if (p === "login") return isLoggedIn();
+  return true;
+}
+function applyModuleVisibility() {
+  document.querySelectorAll("[data-module]").forEach(sec => sec.classList.toggle("hidden", !moduleVisible(sec.dataset.module)));
+  // 作業檢核區塊：需登入才顯示（未登入完全隱藏）
+  const hw = document.getElementById("hwSection");
+  if (hw) hw.classList.toggle("hidden", !isLoggedIn());
+}
+
+/* 取得可排序的模組區塊（data-module 4 個 + 作業檢核） */
+function getOrderableSections() {
+  const area = document.getElementById("moduleArea"), map = {};
+  if (!area) return map;
+  area.querySelectorAll("[data-module]").forEach(s => map[s.dataset.module] = s);
+  const hw = document.getElementById("hwSection"); if (hw) map["homework"] = hw;
+  return map;
+}
+/* 依後台設定的順序重排主畫面模組 */
+function applyModuleOrder() {
+  const area = document.getElementById("moduleArea"); if (!area) return;
+  const anchor = document.getElementById("moduleTail"); if (!anchor) return;
+  const map = getOrderableSections();
+  const saved = APP_STATE.config?.moduleOrder;
+  const order = (Array.isArray(saved) && saved.length) ? saved.slice() : DEFAULT_ORDER.slice();
+  DEFAULT_ORDER.forEach(k => { if (!order.includes(k)) order.push(k); }); // 補齊遺漏的鍵
+  order.forEach(k => { if (map[k]) area.insertBefore(map[k], anchor); });
+}
+
+function renderModuleLocks() {
+  document.querySelectorAll("[data-module]").forEach(sec => {
+    const mod = sec.dataset.module;
+    const lockSpan = sec.querySelector(".modlock");
+    if (lockSpan) {
+      lockSpan.textContent = permOf(mod) === "login" ? "🔒需登入" : "";
+      lockSpan.className = "modlock text-xs align-middle px-1.5 py-0.5 rounded " + (permOf(mod) === "login" ? "bg-amber-100 text-amber-700" : "");
+    }
+  });
+  refreshActivePanels();
+}
+
+function refreshActivePanels() {
+  applyModuleVisibility();
+  applyModuleOrder();
+  applyTeacherTools();
+  renderContactbook(); renderHomeworkView(); renderCalendar(); renderAnnouncements(); renderSlips(); renderResources(); renderQuiz();
+}
+/* 各區塊的教師專用「新增內容」按鈕：僅老師登入時顯示 */
+function applyTeacherTools() {
+  document.querySelectorAll(".teacher-only").forEach(el => el.classList.toggle("hidden", !APP_STATE.isTeacher));
+}
+
+/* ════════ 登入 / 登出 ════════ */
+document.getElementById("btnLogin").onclick = openLogin;
+document.getElementById("btnLogout").onclick = doLogout;
+
+function renderLoginUI() {
+  const badge = document.getElementById("loginBadge");
+  const bIn = document.getElementById("btnLogin"), bOut = document.getElementById("btnLogout"), bAdmin = document.getElementById("btnAdmin");
+  if (APP_STATE.isTeacher) {
+    badge.textContent = "👩‍🏫 老師"; badge.classList.remove("hidden");
+    bIn.classList.add("hidden"); bOut.classList.remove("hidden"); bAdmin.classList.remove("hidden");
+  } else if (APP_STATE.session) {
+    badge.textContent = `${APP_STATE.session.seat}號 ${APP_STATE.session.name || ""}`.trim();
+    badge.classList.remove("hidden"); bIn.classList.add("hidden"); bOut.classList.remove("hidden"); bAdmin.classList.add("hidden");
+  } else {
+    badge.classList.add("hidden"); bIn.classList.remove("hidden"); bOut.classList.add("hidden"); bAdmin.classList.add("hidden");
+  }
+  // 浮動「聯絡老師」按鈕：僅家長登入時顯示
+  const floatBtn = document.getElementById("floatContact");
+  if (floatBtn) floatBtn.classList.toggle("hidden", !APP_STATE.session);
+  updateFloatBadge();
+  // 浮動「家長私訊」按鈕：僅老師登入時顯示
+  updateTeacherFloat();
+}
+
+function restoreSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
+    if (s && s.expire > Date.now()) APP_STATE.session = { seat: s.seat, name: s.name };
+    else localStorage.removeItem(LS_SESSION);
+  } catch (e) {}
+}
+
+function openLogin() {
+  const seatOptions = APP_STATE.students
+    .map(s => `<option value="${s.seat}">${s.seat}號${s.hideName ? "" : (s.name ? " " + s.name : "")}</option>`).join("");
+  showModal(`
+    <div class="p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold">登入</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button>
+      </div>
+      <div class="flex gap-2 text-sm">
+        <button id="tabParent" class="flex-1 py-2 rounded-xl bg-blue-600 text-white font-medium">家長／學生</button>
+        <button id="tabTeacher" class="flex-1 py-2 rounded-xl bg-slate-100 text-slate-600 font-medium">老師</button>
+      </div>
+      <div id="paneParent" class="space-y-3">
+        <div>
+          <label class="text-sm font-medium">選擇座號</label>
+          <select id="loginSeat" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm">${seatOptions || '<option value="">（老師尚未建立名單）</option>'}</select>
+        </div>
+        <div>
+          <label class="text-sm font-medium">專屬密碼</label>
+          <input id="loginPwd" type="password" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" placeholder="老師設定的密碼" />
+        </div>
+        <label class="flex items-center gap-2 text-sm text-slate-600">
+          <input id="loginRemember" type="checkbox" class="rounded" checked /> 記住登入狀態（14 天內免重複登入）
+        </label>
+        <button id="doParentLogin" class="btn3d b-blue w-full">登入</button>
+      </div>
+      <div id="paneTeacher" class="space-y-3 hidden">
+        <div>
+          <label class="text-sm font-medium">老師後台密碼</label>
+          <input id="teacherPwd" type="password" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" placeholder="管理密碼" />
+        </div>
+        <p class="text-xs text-slate-400">首次使用：若尚未設定老師密碼，輸入任意密碼即會自動建立後台帳號。</p>
+        <button id="doTeacherLogin" class="btn3d b-slate w-full">進入後台</button>
+      </div>
+    </div>`, { size: "max-w-sm" });
+
+  const tP = document.getElementById("tabParent"), tT = document.getElementById("tabTeacher");
+  tP.onclick = () => { tP.className = "flex-1 py-2 rounded-xl bg-blue-600 text-white font-medium"; tT.className = "flex-1 py-2 rounded-xl bg-slate-100 text-slate-600 font-medium"; document.getElementById("paneParent").classList.remove("hidden"); document.getElementById("paneTeacher").classList.add("hidden"); };
+  tT.onclick = () => { tT.className = "flex-1 py-2 rounded-xl bg-slate-800 text-white font-medium"; tP.className = "flex-1 py-2 rounded-xl bg-slate-100 text-slate-600 font-medium"; document.getElementById("paneTeacher").classList.remove("hidden"); document.getElementById("paneParent").classList.add("hidden"); };
+  document.getElementById("doParentLogin").onclick = parentLogin;
+  document.getElementById("doTeacherLogin").onclick = teacherLogin;
+  document.getElementById("loginPwd").addEventListener("keydown", e => { if (e.key === "Enter") parentLogin(); });
+  document.getElementById("teacherPwd").addEventListener("keydown", e => { if (e.key === "Enter") teacherLogin(); });
+}
+
+function parentLogin() {
+  const seat = document.getElementById("loginSeat").value;
+  const pwd = document.getElementById("loginPwd").value;
+  const remember = document.getElementById("loginRemember").checked;
+  const stu = APP_STATE.students.find(s => String(s.seat) === String(seat));
+  if (!stu) { toast("找不到該座號", "error"); return; }
+  if (String(stu.password || "") !== pwd) { toast("密碼錯誤，請重新輸入", "error"); return; }
+  APP_STATE.session = { seat: stu.seat, name: stu.name || "" };
+  if (remember) localStorage.setItem(LS_SESSION, JSON.stringify({ seat: stu.seat, name: stu.name || "", expire: Date.now() + 14 * 864e5 }));
+  closeModal(); renderLoginUI(); refreshActivePanels();
+  toast(`歡迎，${stu.seat}號 ${stu.hideName ? "" : (stu.name || "")}！`, "success");
+}
+
+async function teacherLogin() {
+  const pwd = document.getElementById("teacherPwd").value;
+  if (!pwd) { toast("請輸入密碼", "warn"); return; }
+  const stored = APP_STATE.config?.teacherPassword || "";
+  if (!stored) { await db.collection("classroom").doc("config").set({ teacherPassword: pwd }, { merge: true }); toast("已建立老師後台密碼", "success"); }
+  else if (stored !== pwd) { toast("後台密碼錯誤", "error"); return; }
+  APP_STATE.isTeacher = true; closeModal(); renderLoginUI(); refreshActivePanels();
+  toast("老師後台已解鎖", "success");
+}
+
+function doLogout() {
+  APP_STATE.session = null; APP_STATE.isTeacher = false; localStorage.removeItem(LS_SESSION);
+  renderLoginUI(); refreshActivePanels(); toast("已登出", "info");
+}
+
+/* ════════ 工具：日期、富文本、圖片壓縮 ════════ */
+function todayStr(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function escapeHtml(s = "") { return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+function renderRich(text = "") {
+  let html = escapeHtml(text);
+  html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  const lines = html.split("\n"); let out = "", inList = false;
+  for (const ln of lines) {
+    if (/^\s*[-•]\s+/.test(ln)) { if (!inList) { out += "<ul>"; inList = true; } out += "<li>" + ln.replace(/^\s*[-•]\s+/, "") + "</li>"; }
+    else { if (inList) { out += "</ul>"; inList = false; } out += ln + "<br/>"; }
+  }
+  if (inList) out += "</ul>";
+  return out;
+}
+function compressImage(file, maxW = 800, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject; img.src = e.target.result;
+    };
+    reader.onerror = reject; reader.readAsDataURL(file);
+  });
+}
+
+/* ════════ 模組 1：每日聯絡簿 ════════ */
+let cbUnsub = null, CB_DATA = null;
+function setupContactbook() {
+  const dateInput = document.getElementById("cbDate");
+  dateInput.value = todayStr(); dateInput.onchange = loadContactbook; loadContactbook();
+}
+function loadContactbook() {
+  if (cbUnsub) cbUnsub();
+  const date = document.getElementById("cbDate").value || todayStr();
+  cbUnsub = db.collection("contactbook").doc(date).onSnapshot(doc => { CB_DATA = doc.exists ? doc.data() : null; renderContactbook(); });
+}
+function renderContactbook() {
+  const locked = document.getElementById("cbLocked"), body = document.getElementById("cbBody");
+  if (!canView("contactbook")) { locked.classList.remove("hidden"); body.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); body.classList.remove("hidden");
+  document.getElementById("cbContent").innerHTML = CB_DATA?.content ? `<div class="cb-cols">${renderContactbookContent(CB_DATA.content)}</div>` : '<span class="text-slate-400">本日尚無聯絡簿內容。</span>';
+  const row = document.getElementById("cbReadRow"), state = document.getElementById("cbReadState"), btn = document.getElementById("cbReadBtn");
+  if (APP_STATE.session && CB_DATA) {
+    row.classList.remove("hidden");
+    const reads = CB_DATA.reads || {};
+    if (reads[APP_STATE.session.seat]) { state.textContent = "✅ 您已完成已讀簽章"; btn.classList.add("hidden"); }
+    else { state.textContent = "尚未簽章"; btn.classList.remove("hidden"); }
+  } else row.classList.add("hidden");
+
+  // 教師：直接在聯絡簿區塊呈現家長已讀狀況
+  const rep = document.getElementById("cbReadReport");
+  if (rep) {
+    if (APP_STATE.isTeacher) {
+      rep.classList.remove("hidden");
+      rep.innerHTML = `<div class="text-sm font-bold text-sky-700 mb-2">📊 家長已讀狀況</div>${readReportHtml(CB_DATA?.reads || {})}`;
+    } else rep.classList.add("hidden");
+  }
+}
+/* 已讀/未讀座號報表 HTML（教師端共用） */
+function readReportHtml(reads) {
+  const readSeats = Object.keys(reads || {});
+  const all = APP_STATE.students.map(s => String(s.seat));
+  const unread = all.filter(s => !readSeats.includes(s));
+  return `<div class="space-y-2 text-sm">
+    <div><span class="text-emerald-600 font-medium">✅ 已讀 (${readSeats.length})：</span>${readSeats.length ? readSeats.map(s => `<span class="inline-block bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5 text-xs m-0.5">${escapeHtml(s)}</span>`).join("") : "<span class='text-slate-400'>無</span>"}</div>
+    <div><span class="text-rose-600 font-medium">❌ 未讀 (${unread.length})：</span>${unread.length ? unread.map(s => `<span class="inline-block bg-rose-100 text-rose-700 rounded px-1.5 py-0.5 text-xs m-0.5">${escapeHtml(s)}</span>`).join("") : "<span class='text-slate-400'>全部已讀 🎉</span>"}</div>
+  </div>`;
+}
+/* 可被視為「作業項目」的行首符號：- • * ・ ◦ ‧ ／ 數字編號(1. 1) 1、 (1) ①…) ／ ▪ ◆ ★ 等 */
+const CB_BULLET = /^([-－•‧・◦▪◆■●○★☆※*✦✓✔]|\d+[.\)、,．]|[（(]\d+[）)]|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫])\s*/;
+function inlineRich(s = "") {
+  let h = escapeHtml(s);
+  h = h.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  h = h.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return h;
+}
+function renderContactbookContent(text = "") {
+  const out = []; let idx = 0;
+  text.split("\n").forEach(raw => {
+    const ln = raw.trim();
+    if (!ln) return;
+    if (/[:：]\s*$/.test(ln)) {
+      // 以「：」結尾的行 → 區段標題（如「今日作業：」）
+      out.push(`<div class="cb-head">${inlineRich(ln)}</div>`);
+    } else {
+      // 其餘每一行 → 一張編號作業卡片（自動去掉開頭既有的符號/編號）
+      idx++;
+      out.push(`<div class="cb-item"><div class="cb-num">${idx}</div><div class="cb-text">${inlineRich(ln.replace(CB_BULLET, ""))}</div></div>`);
+    }
+  });
+  return out.join("") || '<span class="text-slate-400">本日尚無聯絡簿內容。</span>';
+}
+
+/* 全螢幕放大顯示當日聯絡簿，方便學生抄寫；可手動調整字級 */
+let cbFontSize = 36; // 放大畫面基準字級(px)，可調整
+function openContactbookFullscreen() {
+  const date = document.getElementById("cbDate")?.value || todayStr();
+  if (!CB_DATA?.content) { toast("本日尚無聯絡簿內容", "warn"); return; }
+  const old = document.getElementById("cbFull"); if (old) old.remove();
+  const el = document.createElement("div");
+  el.id = "cbFull";
+  el.className = "fixed inset-0 z-[120] bg-gradient-to-br from-sky-50 via-white to-blue-100 overflow-y-auto";
+  el.innerHTML = `
+    <div class="sticky top-0 bg-white/90 backdrop-blur px-4 py-3 flex items-center justify-between gap-2 flex-wrap shadow-sm">
+      <div class="font-black text-sky-700 text-base md:text-xl">📒 ${escapeHtml(date)}　聯絡簿</div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400 hidden sm:inline">字級</span>
+        <button onclick="cbFontStep(-3)" class="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 font-bold hover:bg-sky-200">A−</button>
+        <input id="cbFontRange" type="range" min="20" max="80" value="${cbFontSize}" oninput="cbFontSet(this.value)" class="w-24 sm:w-32 accent-sky-600">
+        <button onclick="cbFontStep(3)" class="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 font-bold text-lg hover:bg-sky-200">A+</button>
+        <span id="cbFontLabel" class="text-xs text-slate-500 w-10 text-center">${cbFontSize}px</span>
+        <button onclick="closeContactbookFullscreen()" class="btn3d b-slate text-sm">✕ 關閉</button>
+      </div>
+    </div>
+    <div id="cbBigContent" class="cb-big max-w-4xl mx-auto px-5 py-8" style="font-size:${cbFontSize}px">${renderContactbookContent(CB_DATA.content)}</div>`;
+  document.body.appendChild(el);
+  document.addEventListener("keydown", cbFullEsc);
+}
+function cbFontSet(v) {
+  cbFontSize = Math.max(20, Math.min(80, Number(v) || 36));
+  const c = document.getElementById("cbBigContent"); if (c) c.style.fontSize = cbFontSize + "px";
+  const l = document.getElementById("cbFontLabel"); if (l) l.textContent = cbFontSize + "px";
+  const r = document.getElementById("cbFontRange"); if (r) r.value = cbFontSize;
+}
+function cbFontStep(d) { cbFontSet(cbFontSize + d); }
+function closeContactbookFullscreen() {
+  const el = document.getElementById("cbFull"); if (el) el.remove();
+  document.removeEventListener("keydown", cbFullEsc);
+}
+function cbFullEsc(e) { if (e.key === "Escape") closeContactbookFullscreen(); }
+
+async function markRead() {
+  if (!APP_STATE.session) { toast("請先登入", "warn"); return; }
+  const date = document.getElementById("cbDate").value || todayStr();
+  try {
+    await db.collection("contactbook").doc(date).set({ reads: { [APP_STATE.session.seat]: firebase.firestore.FieldValue.serverTimestamp() } }, { merge: true });
+    toast("已記錄您的已讀簽章，謝謝！", "success");
+  } catch (e) { toast("簽章失敗：" + e.message, "error"); }
+}
+
+/* ════════ 作業檢核（前台即時查看） ════════ */
+function extractHomework(content = "") {
+  const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
+  const bullets = lines.filter(l => CB_BULLET.test(l)).map(l => l.replace(CB_BULLET, "").trim()).filter(Boolean);
+  return (bullets.length ? bullets : lines);
+}
+/* 從 Firestore 錯誤訊息中擷取「建立索引」的連結 */
+function extractIndexUrl(msg = "") {
+  const m = String(msg).match(/https:\/\/console\.firebase\.google\.com\/[^\s)"']+/);
+  return m ? m[0] : null;
+}
+/* 在網頁上直接顯示「如何建立索引」的說明與連結（免進 F12） */
+function showIndexHelp(url) {
+  showModal(`
+    <div class="p-6 space-y-4">
+      <div class="flex items-center justify-between"><h3 class="text-lg font-bold">🛠️ 首次使用需建立資料庫索引</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <p class="text-sm text-slate-600 leading-relaxed">「作業檢核」第一次使用時，Firebase 需要您建立一個查詢索引（<b>只需做一次</b>，建立後永久有效，約 1～2 分鐘完成）。</p>
+      <ol class="text-sm text-slate-600 list-decimal pl-5 space-y-1">
+        <li>點下方按鈕前往 Firebase 主控台（已自動帶入此索引設定）。</li>
+        <li>在開啟的頁面點「<b>建立索引 / Create index</b>」。</li>
+        <li>等待索引狀態由「建立中」變為「<b>已啟用</b>」後，回到本頁再操作一次即可。</li>
+      </ol>
+      ${url ? `
+        <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn3d b-blue w-full text-center block">前往建立索引 →</a>
+        <div class="flex gap-2"><input id="idxUrl" readonly value="${escapeHtml(url)}" class="flex-1 border rounded-xl px-2 py-1.5 text-xs bg-slate-50"><button onclick="copyText(document.getElementById('idxUrl').value,'已複製索引連結')" class="px-3 py-1.5 rounded-xl bg-slate-200 text-sm">複製</button></div>`
+        : `<p class="text-xs text-rose-500">未能自動取得索引連結，請至 Firebase 主控台 → Firestore Database → 索引（Indexes），依提示手動建立。</p>`}
+    </div>`, { size: "max-w-md" });
+}
+
+/* 查詢「前一個上課日」(嚴格早於指定日期、最近一筆有內容的聯絡簿)
+   若遇到需建立索引的錯誤，會在畫面上彈出說明並丟出 __INDEX__ 讓呼叫端停止後續流程 */
+async function findPrevContactbook(date) {
+  try {
+    const snap = await db.collection("contactbook")
+      .where(firebase.firestore.FieldPath.documentId(), "<", date)
+      .orderBy(firebase.firestore.FieldPath.documentId(), "desc").limit(10).get();
+    for (const d of snap.docs) {
+      const content = d.data().content || "";
+      if (content.trim()) return { date: d.id, content };
+    }
+  } catch (e) {
+    console.warn("查前一上課日聯絡簿失敗", e);
+    const url = extractIndexUrl(e.message);
+    if (url || e.code === "failed-precondition") { showIndexHelp(url); throw new Error("__INDEX__"); }
+    throw e;
+  }
+  return null;
+}
+
+let hwTodayUnsub = null;
+function setupHomeworkView() {
+  if (hwTodayUnsub) hwTodayUnsub();
+  const today = todayStr();
+  hwTodayUnsub = db.collection("homework").doc(today).onSnapshot(s => { HW_TODAY = s.exists ? s.data() : null; renderHomeworkView(); });
+}
+/* 切換教師主畫面「立即檢核」模式 */
+function toggleHwInline() {
+  if (!APP_STATE.isTeacher) { toast("僅老師可即時檢核", "warn"); return; }
+  hwInlineEdit = !hwInlineEdit;
+  renderHomeworkView();
+  toast(hwInlineEdit ? "已開啟即時檢核，點擊欄位即可切換並儲存" : "已結束即時檢核", "info");
+}
+
+/* 產生一個半邊的檢核表（students 為該欄學生子集） */
+function hwTableHtml(students, items, status, editable, mySeat) {
+  let html = '<table class="hw-table text-sm"><thead><tr><th class="hw-th-seat">座號</th>' + items.map(it => `<th class="hw-th">${escapeHtml(it)}</th>`).join("") + "</tr></thead><tbody>";
+  students.forEach(st => {
+    const isMe = mySeat && String(st.seat) === mySeat;
+    html += `<tr class="${isMe ? "hw-row-me" : ""}"><td class="hw-td-seat">${escapeHtml(st.seat)}${st.hideName ? "" : (st.name ? " " + escapeHtml(st.name) : "")}${isMe ? " ⭐" : ""}</td>`;
+    items.forEach((it, idx) => {
+      const cur = status[st.seat + "_" + idx] || 0;
+      html += editable
+        ? `<td><button class="hw-cell hw-clickable hw-${cur}" onclick="cycleHw('${todayStr()}','${escapeHtml(String(st.seat))}',${idx},${cur})">${HW_STATES[cur].label}</button></td>`
+        : `<td><span class="hw-cell hw-${cur}">${HW_STATES[cur].label}</span></td>`;
+    });
+    html += "</tr>";
+  });
+  return html + "</tbody></table>";
+}
+
+function renderHomeworkView() {
+  const locked = document.getElementById("hwLocked"), wrap = document.getElementById("hwViewWrap"), btn = document.getElementById("hwInlineBtn");
+  if (!wrap) return;
+  if (!isLoggedIn()) { if (btn) btn.classList.add("hidden"); locked.classList.remove("hidden"); wrap.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); wrap.classList.remove("hidden");
+
+  const box = document.getElementById("hwViewBox"), data = HW_TODAY;
+  if (!data || !(data.items || []).length) {
+    if (btn) btn.classList.add("hidden");
+    box.innerHTML = '<p class="text-slate-400 text-sm py-3 text-center">老師尚未建立今日作業檢核。</p>';
+    return;
+  }
+  const items = data.items, status = data.status || {};
+  const mySeat = APP_STATE.session ? String(APP_STATE.session.seat) : null;
+  const editable = APP_STATE.isTeacher && hwInlineEdit;
+
+  // 老師才顯示「立即檢核」切換鈕
+  if (btn) {
+    if (APP_STATE.isTeacher) {
+      btn.classList.remove("hidden");
+      btn.textContent = hwInlineEdit ? "✓ 檢核中（點欄位即存）" : "✏️ 立即檢核";
+      btn.classList.toggle("b-emerald", hwInlineEdit);
+      btn.classList.toggle("b-amber", !hwInlineEdit);
+    } else btn.classList.add("hidden");
+  }
+
+  const srcLine = `<div class="text-xs text-slate-500 mb-2">作業來源：<b>${escapeHtml(data.sourceDate || "—")}</b> 聯絡簿${editable ? ' ・<span class="text-emerald-600 font-medium">即時檢核中</span>' : ""}</div>`;
+
+  if (!APP_STATE.isTeacher) {
+    // 家長／學生：只顯示自己的作業檢核情形
+    const me = APP_STATE.students.filter(s => String(s.seat) === mySeat);
+    box.innerHTML = srcLine + (me.length
+      ? `<div class="overflow-x-auto">${hwTableHtml(me, items, status, false, mySeat)}</div>`
+      : '<p class="text-slate-400 text-sm py-3 text-center">找不到您的座號資料。</p>');
+    return;
+  }
+
+  // 老師：依人數等分左右二欄顯示全班
+  const studs = APP_STATE.students;
+  const half = Math.ceil(studs.length / 2);
+  const left = studs.slice(0, half), right = studs.slice(half);
+  box.innerHTML = srcLine + `<div class="grid grid-cols-2 gap-3 items-start">
+    <div class="overflow-x-auto">${hwTableHtml(left, items, status, editable, mySeat)}</div>
+    <div class="overflow-x-auto">${right.length ? hwTableHtml(right, items, status, editable, mySeat) : ""}</div>
+  </div>`;
+}
+
+/* ════════ 模組 2：班級日曆 ════════ */
+function setupCalendar() {
+  APP_STATE.calMonth = new Date(); APP_STATE.calMonth.setDate(1);
+  db.collection("calendar").onSnapshot(snap => { APP_STATE.calEvents = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderCalendar(); }, err => console.warn("日曆監聽失敗", err));
+}
+function calMove(delta) { APP_STATE.calMonth.setMonth(APP_STATE.calMonth.getMonth() + delta); renderCalendar(); }
+function renderCalendar() {
+  const locked = document.getElementById("calLocked"), grid = document.getElementById("calGrid");
+  if (!canView("calendar")) { locked.classList.remove("hidden"); grid.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); grid.classList.remove("hidden");
+  const m = APP_STATE.calMonth;
+  document.getElementById("calLabel").textContent = `${m.getFullYear()}年${m.getMonth()+1}月`;
+  const year = m.getFullYear(), month = m.getMonth();
+  const first = new Date(year, month, 1).getDay(), days = new Date(year, month + 1, 0).getDate();
+  const weekHead = ["日","一","二","三","四","五","六"];
+  let html = weekHead.map((w,i) => `<div class="font-bold py-1 ${i===0?'text-rose-400':i===6?'text-blue-400':'text-slate-400'}">${w}</div>`).join("");
+  for (let i = 0; i < first; i++) html += "<div></div>";
+  for (let d = 1; d <= days; d++) {
+    const evs = APP_STATE.calEvents.filter(e => normDate(e.date) === `${year}/${month+1}/${d}`);
+    const isToday = todayStr() === `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    html += `<div class="min-h-[3.6rem] rounded-xl border p-1 text-left ${isToday?'border-violet-400 bg-violet-50/70':'border-white/60 bg-white/40'}">
+      <div class="text-xs ${isToday?'text-violet-600 font-bold':'text-slate-400'}">${d}</div>
+      ${evs.map(e => `<button onclick='showEvent(${JSON.stringify(JSON.stringify(e))})' class="block w-full truncate text-[11px] leading-tight mt-0.5 px-1 py-0.5 rounded-lg bg-violet-200/80 text-violet-800 hover:bg-violet-300">${escapeHtml(e.title||"活動")}</button>`).join("")}
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+function normDate(s = "") { const m = String(s).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/); return m ? `${+m[1]}/${+m[2]}/${+m[3]}` : s; }
+function showEvent(json) {
+  const e = JSON.parse(json);
+  const linkHtml = e.url ? `<a href="${escapeHtml(e.url)}" target="_blank" rel="noopener" class="inline-block mt-2 text-blue-600 underline text-sm">🔗 相關連結</a>` : "";
+  showModal(`
+    <div class="p-6 space-y-3">
+      <div class="flex items-start justify-between gap-3">
+        <div><div class="text-xs text-violet-600 font-medium">${escapeHtml(normDate(e.date))}</div><h3 class="text-lg font-bold">${escapeHtml(e.title || "活動")}</h3></div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button>
+      </div>
+      <div class="rich-content text-sm text-slate-700 leading-relaxed">${e.desc ? renderRich(e.desc) : '<span class="text-slate-400">（無詳細描述）</span>'}</div>
+      ${linkHtml}
+    </div>`, { size: "max-w-md" });
+}
+
+/* ════════ 模組 3：公告與榮譽榜 ════════ */
+let ANN_DATA = [];
+function setupAnnouncements() {
+  db.collection("announcements").orderBy("createdAt", "desc").onSnapshot(snap => { ANN_DATA = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAnnouncements(); }, err => console.warn("公告監聽失敗", err));
+}
+function renderAnnouncements() {
+  const locked = document.getElementById("annLocked"), list = document.getElementById("annList");
+  if (!canView("announcements")) { locked.classList.remove("hidden"); list.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); list.classList.remove("hidden");
+  const visible = ANN_DATA.filter(a => !a.hidden);
+  if (!visible.length) { list.innerHTML = '<p class="text-center text-slate-400 text-sm py-6">目前沒有公告。</p>'; return; }
+  list.innerHTML = visible.map(a => {
+    const imgs = (a.images || []).map(src => `<img src="${src}" class="rounded-xl w-full max-h-72 object-cover cursor-pointer" onclick="viewImage('${src}')" />`).join("");
+    const date = a.createdAt?.toDate ? a.createdAt.toDate().toLocaleDateString("zh-TW") : "";
+    return `<article class="bg-white/60 border border-white/70 rounded-2xl p-4 space-y-2 shadow-sm">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-rose-800">${escapeHtml(a.title || "公告")}</h3><span class="text-xs text-slate-400">${date}</span></div>
+      <div class="rich-content text-sm text-slate-600 leading-relaxed">${renderRich(a.content || "")}</div>
+      ${imgs ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">${imgs}</div>` : ""}
+    </article>`;
+  }).join("");
+}
+function viewImage(src) { showModal(`<div class="p-2"><img src="${src}" class="rounded-2xl w-full" /><div class="text-center pt-2"><button onclick="closeModal()" class="px-4 py-2 text-sm rounded-xl bg-slate-100">關閉</button></div></div>`, { size: "max-w-2xl" }); }
+
+/* ════════ 模組 4：回條拍照回傳 ════════ */
+let SLIP_DATA = [], SUB_DATA = [];
+function setupSlips() {
+  db.collection("slips").orderBy("createdAt", "desc").onSnapshot(snap => { SLIP_DATA = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderSlips(); }, err => console.warn("回條監聽失敗", err));
+  db.collection("slipSubmissions").onSnapshot(snap => { SUB_DATA = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderSlips(); }, err => console.warn("回條繳交監聽失敗", err));
+}
+function renderSlips() {
+  const locked = document.getElementById("slipLocked"), list = document.getElementById("slipList");
+  if (!canView("slips")) { locked.classList.remove("hidden"); list.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); list.classList.remove("hidden");
+  const active = SLIP_DATA.filter(s => !s.hidden);
+  if (!active.length) { list.innerHTML = '<p class="text-center text-slate-400 text-sm py-6">目前沒有待繳回條。</p>'; return; }
+  list.innerHTML = active.map(s => {
+    const my = APP_STATE.session ? SUB_DATA.find(x => x.slipId === s.id && String(x.seat) === String(APP_STATE.session.seat)) : null;
+    let statusHtml = "", actionHtml = "";
+    if (APP_STATE.session) {
+      if (my) {
+        const map = { pending: ["⏳ 已回傳，等待老師審核","bg-amber-100 text-amber-700"], approved: ["✅ 審核通過","bg-emerald-100 text-emerald-700"], rejected: [`❌ 已退回：${escapeHtml(my.reason||"")}`,"bg-rose-100 text-rose-700"] };
+        const [txt, cls] = map[my.status] || map.pending;
+        statusHtml = `<span class="text-xs px-2 py-1 rounded-full ${cls}">${txt}</span>`;
+        if (my.status === "rejected") actionHtml = `<label class="text-xs text-blue-600 underline cursor-pointer">重新上傳<input type="file" accept="image/*" capture="environment" class="hidden" onchange="uploadSlip('${s.id}', this)"></label>`;
+      } else actionHtml = `<label class="btn3d b-emerald text-xs cursor-pointer">📷 拍照／上傳<input type="file" accept="image/*" capture="environment" class="hidden" onchange="uploadSlip('${s.id}', this)"></label>`;
+    } else statusHtml = '<span class="text-xs text-slate-400">登入後可上傳</span>';
+    return `<div class="bg-white/60 border border-white/70 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap shadow-sm">
+      <div><h3 class="font-medium text-emerald-800">${escapeHtml(s.name || "回條")}</h3><p class="text-xs text-slate-400">截止：${escapeHtml(s.deadline || "—")}</p></div>
+      <div class="flex items-center gap-2">${statusHtml}${actionHtml}</div>
+    </div>`;
+  }).join("");
+}
+async function uploadSlip(slipId, input) {
+  if (!APP_STATE.session) { toast("請先登入", "warn"); return; }
+  const file = input.files[0]; if (!file) return;
+  toast("圖片處理中…", "info");
+  try {
+    const base64 = await compressImage(file);
+    const docId = `${slipId}_${APP_STATE.session.seat}`;
+    await db.collection("slipSubmissions").doc(docId).set({ slipId, seat: APP_STATE.session.seat, name: APP_STATE.session.name || "", image: base64, status: "pending", reason: "", submittedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    toast("已回傳，等待老師審核", "success");
+  } catch (e) { toast("上傳失敗：" + e.message, "error"); }
+  input.value = "";
+}
+
+/* ════════ 不重複訪客統計 ════════ */
+function getDeviceId() { let id = localStorage.getItem(LS_DEVICE); if (!id) { id = "d_" + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(LS_DEVICE, id); } return id; }
+async function countVisitor() {
+  const date = todayStr(), did = getDeviceId(), ref = db.collection("visits").doc(date);
+  ref.onSnapshot(doc => { const devices = doc.exists ? (doc.data().devices || {}) : {}; document.getElementById("visitCount").textContent = Object.keys(devices).length || 0; });
+  try { await ref.set({ devices: { [did]: true } }, { merge: true }); } catch (e) { console.warn("訪客計數失敗", e); }
+}
+
+/* ════════ 說明視窗 ════════ */
+function openHelp() {
+  showModal(`
+    <div class="p-6 space-y-4 overflow-y-auto">
+      <div class="flex items-center justify-between"><h3 class="text-lg font-bold">📖 如何設定免費 Firebase</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <ol class="space-y-3 text-sm text-slate-600 leading-relaxed list-decimal pl-5">
+        <li>前往 <a href="https://console.firebase.google.com" target="_blank" class="text-blue-600 underline">Firebase 主控台</a>，用 Google 帳號登入。</li>
+        <li>點「新增專案」，輸入名稱，一路按繼續完成建立（可關閉 Google Analytics）。</li>
+        <li>左側 <b>建構 → Firestore Database</b>，點「建立資料庫」，選「<b>以測試模式啟動</b>」，地區建議 <code>asia-east1</code>。</li>
+        <li>左側 <b>建構 → Authentication → 開始使用</b>，在「Sign-in method」啟用「<b>匿名</b>」。</li>
+        <li>回「專案總覽」，點 <b>&lt;/&gt;（網頁）</b> 圖示新增應用程式，取得 <code>firebaseConfig</code>。</li>
+        <li>複製 config 物件大括號內六行內容，點本系統「⚙️ 設定」貼上即可。</li>
+        <li>正式上線前，請將下方安全規則貼到 <b>Firestore → 規則</b> 並發布。</li>
+      </ol>
+      <div class="bg-slate-50 rounded-xl p-3">
+        <div class="flex items-center justify-between mb-1"><span class="text-xs font-bold text-slate-500">建議 Firestore 安全規則</span><button onclick="copyText(document.getElementById('rulesText').textContent,'已複製安全規則')" class="text-xs text-blue-600 underline">複製</button></div>
+        <pre id="rulesText" class="text-[11px] bg-white border rounded p-2 overflow-x-auto whitespace-pre">rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // This rule allows anyone with your Firestore database reference to view, edit,
+    // and delete all data in your Firestore database. It is useful for getting
+    // started, but it is configured to expire after 30 days because it
+    // leaves your app open to attackers. At that time, all client
+    // requests to your Firestore database will be denied.
+    //
+    // Make sure to write security rules for your app before that time, or else
+    // all client requests to your Firestore database will be denied until you Update
+    // your rules
+    match /{document=**} {
+      allow read, write: if request.time &lt; timestamp.date(2126, 7, 24);
+    }
+  }
+}</pre>
+        <p class="text-[11px] text-slate-400 mt-1">※ 座號密碼/老師密碼屬前端輕量保護，適合一般班級非機敏用途。如需更高安全性，請改用 Firebase 自訂後端驗證。</p>
+      </div>
+      <div class="text-right"><button onclick="closeModal();openSettings()" class="btn3d b-blue text-sm">前往設定 →</button></div>
+    </div>`, { size: "max-w-xl" });
+}
+
+/* ════════ 設定視窗 ════════ */
+function openSettings() {
+  showModal(`
+    <div class="p-6 space-y-4 overflow-y-auto">
+      <div class="flex items-center justify-between"><h3 class="text-lg font-bold">⚙️ 設定 Firebase 連線</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <div class="space-y-2">
+        <label class="text-sm font-medium block">貼上 Firebase 設定</label>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          請從您的 Firebase 專案中，複製 <code>firebaseConfig</code> 物件 <code>{</code> 和 <code>}</code> 之間的
+          <b>六行內容（Key: Value）</b>，貼到下方。<br/>
+          <span class="text-rose-500 font-medium">請勿貼上大括號 {} 或變數宣告</span>，只需貼上
+          <code>apiKey: "..."</code> 到 <code>appId: "..."</code> 的內容。（貼整段含括號也能自動解析）
+        </p>
+        <textarea id="cfgInput" style="min-height:150px" class="w-full border rounded-xl p-3 text-xs font-mono" placeholder='apiKey: "AIza...",
+authDomain: "xxx.firebaseapp.com",
+projectId: "xxx",
+storageBucket: "xxx.appspot.com",
+messagingSenderId: "1234567890",
+appId: "1:1234:web:abcd"'></textarea>
+        <button id="saveCfg" class="btn3d b-blue w-full">解析並儲存（重新整理）</button>
+      </div>
+      <hr/>
+      <div class="space-y-2">
+        <h4 class="text-sm font-bold">🔗 產生分享連結 / QR Code</h4>
+        <p class="text-xs text-slate-500">將目前設定加密（Base64）放入網址，他人開啟即自動連線。</p>
+        <button id="genShare" class="btn3d b-emerald w-full text-sm ${ACTIVE_CONFIG ? "" : "opacity-50 pointer-events-none"}">產生分享連結</button>
+        <div id="shareResult" class="hidden space-y-2">
+          <div class="flex gap-2"><input id="shareUrl" readonly class="flex-1 border rounded-xl px-2 py-1.5 text-xs bg-slate-50" /><button onclick="copyText(document.getElementById('shareUrl').value,'已複製分享連結')" class="px-3 py-1.5 rounded-xl bg-slate-200 text-sm">複製</button></div>
+          <div id="shortUrlBox" class="text-xs text-slate-500"></div>
+          <div id="qrBox" class="flex justify-center pt-2"></div>
+        </div>
+      </div>
+      <hr/>
+      <button id="clearCfg" class="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-bold text-sm hover:bg-rose-100">🗑️ 清除本機設定（回到未設定狀態）</button>
+    </div>`, { size: "max-w-lg" });
+  document.getElementById("saveCfg").onclick = saveConfigFromInput;
+  document.getElementById("genShare").onclick = genShareLink;
+  document.getElementById("clearCfg").onclick = clearConfig;
+}
+function parseConfigText(text) {
+  const keys = ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"]; const result = {};
+  for (const k of keys) { const re = new RegExp(`["']?${k}["']?\\s*[:=]\\s*["']([^"']+)["']`, "i"); const m = text.match(re); if (m) result[k] = m[1].trim(); }
+  return result;
+}
+function saveConfigFromInput() {
+  const cfg = parseConfigText(document.getElementById("cfgInput").value);
+  if (!cfg.apiKey || !cfg.projectId) { toast("解析失敗：至少需包含 apiKey 與 projectId", "error"); return; }
+  ["authDomain","storageBucket","messagingSenderId","appId"].forEach(k => { if (!cfg[k]) cfg[k] = ""; });
+  if (!cfg.authDomain && cfg.projectId) cfg.authDomain = cfg.projectId + ".firebaseapp.com";
+  localStorage.setItem(LS_CONFIG, JSON.stringify(cfg));
+  toast("設定已儲存，即將重新整理…", "success"); setTimeout(() => location.reload(), 800);
+}
+function clearConfig() {
+  confirmDialog("清除本機設定", "將移除本機儲存的 Firebase 設定並重新整理，回到初始未設定狀態。確定嗎？", { okText: "清除", danger: true })
+    .then(ok => { if (!ok) return; localStorage.removeItem(LS_CONFIG); toast("已清除，重新整理中…", "info"); setTimeout(() => location.reload(), 600); });
+}
+function genShareLink() {
+  if (!ACTIVE_CONFIG) { toast("目前無有效設定可分享", "warn"); return; }
+  const enc = btoa(unescape(encodeURIComponent(JSON.stringify(ACTIVE_CONFIG))));
+  const url = `${location.origin}${location.pathname}?config=${enc}`;
+  document.getElementById("shareResult").classList.remove("hidden");
+  document.getElementById("shareUrl").value = url;
+  const qrBox = document.getElementById("qrBox"); qrBox.innerHTML = "";
+  try { new QRCode(qrBox, { text: url, width: 180, height: 180 }); } catch (e) { qrBox.innerHTML = '<span class="text-xs text-slate-400">QR 產生失敗</span>'; }
+  const box = document.getElementById("shortUrlBox"); box.textContent = "短網址產生中…";
+  fetch("https://tinyurl.com/api-create.php?url=" + encodeURIComponent(url)).then(r => r.text())
+    .then(short => { if (short && short.startsWith("http")) box.innerHTML = `短網址：<a href="${short}" target="_blank" class="text-blue-600 underline">${short}</a> <button onclick="copyText('${short}','已複製短網址')" class="text-blue-600 underline ml-1">複製</button>`; else box.textContent = "（短網址服務暫時無法使用）"; })
+    .catch(() => box.textContent = "（短網址服務暫時無法使用）");
+}
+function copyText(text, msg = "已複製") {
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast(msg, "success")).catch(() => fallbackCopy(text, msg));
+  else fallbackCopy(text, msg);
+}
+function fallbackCopy(text, msg) {
+  const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); toast(msg, "success"); } catch (e) { toast("複製失敗，請手動複製", "error"); }
+  ta.remove();
+}
+
+/* ════════════════════ ★★ 老師後台 ★★ ════════════════════ */
+function openAdmin() {
+  if (!APP_STATE.isTeacher) { toast("請先以老師身分登入", "warn"); return; }
+  showModal(`
+    <div class="flex flex-col max-h-[90vh]">
+      <div class="px-6 py-4 border-b flex items-center justify-between shrink-0"><h3 class="text-lg font-bold">🛠️ 老師後台</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <div class="px-4 pt-3 shrink-0">
+        <div class="flex gap-1 text-xs overflow-x-auto pb-2" id="adminTabs">
+          ${["設定","學生帳號","聯絡簿","作業檢核","公告","日曆","回條","私訊","資源連結","小考成績"].map((t,i)=>`<button data-tab="${i}" class="admin-tab px-3 py-1.5 rounded-xl whitespace-nowrap ${i===0?'bg-slate-800 text-white':'bg-slate-100 text-slate-600'}">${t}</button>`).join("")}
+        </div>
+      </div>
+      <div id="adminBody" class="px-6 py-4 overflow-y-auto"></div>
+    </div>`, { size: "max-w-2xl", noBackdropClose: true });
+  document.querySelectorAll(".admin-tab").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".admin-tab").forEach(b => b.className = "admin-tab px-3 py-1.5 rounded-xl whitespace-nowrap bg-slate-100 text-slate-600");
+      btn.className = "admin-tab px-3 py-1.5 rounded-xl whitespace-nowrap bg-slate-800 text-white";
+      renderAdminTab(+btn.dataset.tab);
+    };
+  });
+  renderAdminTab(0);
+}
+function adminGoTab(i) { const b = document.querySelector(`[data-tab="${i}"]`); if (b) b.click(); }
+function renderAdminTab(i) {
+  const body = document.getElementById("adminBody");
+  if (i === 0) adminSettings(body);
+  if (i === 1) adminStudents(body);
+  if (i === 2) adminContactbook(body);
+  if (i === 3) adminHomework(body);
+  if (i === 4) adminAnnouncements(body);
+  if (i === 5) adminCalendar(body);
+  if (i === 6) adminSlips(body);
+  if (i === 7) adminMessages(body);
+  if (i === 8) adminResources(body);
+  if (i === 9) adminQuiz(body);
+}
+
+/* ── 後台：班級設定 + 權限矩陣 ── */
+function adminSettings(body) {
+  const cfg = APP_STATE.config || {}, perms = cfg.perms || DEFAULT_PERMS;
+  body.innerHTML = `
+    <div class="space-y-5">
+      <div><label class="text-sm font-medium">班級名稱</label><input id="setName" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(cfg.className||"")}" placeholder="例：陽光國小三年一班" /></div>
+      <div>
+        <label class="text-sm font-medium">功能模組啟用與權限</label>
+        <p class="text-xs text-slate-400 mb-2">關閉＝主畫面完全不顯示；登入瀏覽＝未登入者看不到此模組，登入後才出現。</p>
+        <div class="mt-2 space-y-2">
+          ${Object.keys(MODULE_NAMES).map(mod => { const cur = perms[mod] || DEFAULT_PERMS[mod] || "public"; return `
+            <div class="flex items-center justify-between border rounded-xl px-3 py-2">
+              <span class="text-sm">${MODULE_NAMES[mod]}${mod==="slips"?' <span class="text-xs text-rose-500">(建議登入)</span>':''}</span>
+              <select data-perm="${mod}" class="text-sm border rounded-lg px-2 py-1"><option value="off" ${cur==="off"?"selected":""}>🚫 關閉</option><option value="public" ${cur==="public"?"selected":""}>🌐 公開瀏覽</option><option value="login" ${cur==="login"?"selected":""}>🔒 登入瀏覽</option></select>
+            </div>`; }).join("")}
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-medium">主畫面模組顯示順序</label>
+        <p class="text-xs text-slate-400 mb-2">用 ▲▼ 調整各模組在主畫面由上到下的排列順序。</p>
+        <div id="orderList" class="space-y-2"></div>
+      </div>
+      <div><label class="text-sm font-medium">變更老師後台密碼</label><input id="setTpwd" type="text" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" placeholder="留空表示不變更" /></div>
+      <div class="border-t pt-4 space-y-2">
+        <label class="text-sm font-medium">📧 家長私訊 Email 通知（Web3Forms）</label>
+        <div class="flex gap-2">
+          <input id="setMailKey" type="text" class="flex-1 border rounded-xl px-3 py-2 text-sm font-mono" value="${escapeHtml(cfg.mailKey||"")}" placeholder="貼上 Web3Forms Access Key" />
+          <button type="button" onclick="testTeacherEmail()" class="btn3d b-emerald text-xs whitespace-nowrap">✉️ 測試</button>
+        </div>
+        <input id="setEmail" type="email" class="w-full border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(cfg.teacherEmail||"")}" placeholder="您申請 Key 時用的 Email（顯示用，選填）" />
+        <label class="flex items-center gap-2 text-sm text-slate-600"><input id="setAutoEmail" type="checkbox" class="rounded" ${cfg.autoEmail?"checked":""}/> 家長傳送私訊時，自動寄一封通知信</label>
+        <div class="text-xs px-2.5 py-2 rounded-lg ${cfg.mailKey ? (cfg.autoEmail ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-700") : "bg-rose-50 text-rose-600"}">
+          目前<b>已儲存</b>狀態：${cfg.mailKey ? (cfg.autoEmail ? "🟢 已啟用自動通知" : "🟡 已存 Key，但「自動寄通知信」未勾選") : "🔴 尚未儲存 Access Key（測試成功後請務必按下方「儲存設定」）"}
+          ${cfg.mailKey ? ' ・ <button type="button" onclick="testSavedNotify()" class="underline font-medium">用已儲存設定測試</button>' : ""}
+        </div>
+        <div class="text-[11px] text-slate-500 leading-relaxed bg-amber-50 border border-amber-100 rounded-lg p-2 space-y-1">
+          <p>改用送達率更高、<b>免點啟用信</b>的免費服務 <b>Web3Forms</b>：</p>
+          <p>1. 前往 <a href="https://web3forms.com" target="_blank" rel="noopener" class="underline text-amber-700 font-medium">web3forms.com</a>，輸入您的 Email，取得免費 <b>Access Key</b>（畫面會直接顯示）。</p>
+          <p>2. 把 Access Key 貼到上方欄位，按 <b>「✉️ 測試」</b> 確認能收到信（首次仍請順手檢查垃圾郵件匣）。</p>
+          <p>3. 勾選自動通知並「儲存設定」。<b>通知信會寄到您申請 Key 時所用的 Email。</b></p>
+        </div>
+      </div>
+      <button id="saveSettings" class="btn3d b-blue w-full">儲存設定</button>
+    </div>`;
+  // 初始化排序暫存並渲染排序清單
+  editOrder = (() => {
+    const saved = APP_STATE.config?.moduleOrder;
+    const o = (Array.isArray(saved) && saved.length) ? saved.slice() : DEFAULT_ORDER.slice();
+    DEFAULT_ORDER.forEach(k => { if (!o.includes(k)) o.push(k); });
+    return o.filter(k => DEFAULT_ORDER.includes(k));
+  })();
+  renderOrderList();
+  document.getElementById("saveSettings").onclick = async () => {
+    const newPerms = {}; document.querySelectorAll("[data-perm]").forEach(s => newPerms[s.dataset.perm] = s.value);
+    const payload = { className: document.getElementById("setName").value.trim() || "班級親師互動網", perms: newPerms, moduleOrder: editOrder.slice(), teacherEmail: document.getElementById("setEmail").value.trim(), mailKey: document.getElementById("setMailKey").value.trim(), autoEmail: document.getElementById("setAutoEmail").checked };
+    const tp = document.getElementById("setTpwd").value; if (tp) payload.teacherPassword = tp;
+    try { await db.collection("classroom").doc("config").set(payload, { merge: true }); toast("設定已儲存", "success"); }
+    catch (e) { toast("儲存失敗：" + e.message, "error"); }
+  };
+}
+
+/* 排序清單渲染與上下移動 */
+function renderOrderList() {
+  const box = document.getElementById("orderList"); if (!box || !editOrder) return;
+  box.innerHTML = editOrder.map((k, i) => `
+    <div class="flex items-center justify-between border rounded-xl px-3 py-2">
+      <span class="text-sm">${i + 1}. ${ORDER_LABELS[k] || k}</span>
+      <div class="flex gap-1">
+        <button onclick="moveOrder(${i},-1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 ${i === 0 ? "opacity-30 pointer-events-none" : ""}">▲</button>
+        <button onclick="moveOrder(${i},1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 ${i === editOrder.length - 1 ? "opacity-30 pointer-events-none" : ""}">▼</button>
+      </div>
+    </div>`).join("");
+}
+function moveOrder(idx, dir) {
+  const j = idx + dir; if (j < 0 || j >= editOrder.length) return;
+  [editOrder[idx], editOrder[j]] = [editOrder[j], editOrder[idx]];
+  renderOrderList();
+}
+
+/* ── 後台：學生帳號 ── */
+function adminStudents(body) {
+  const rows = APP_STATE.students.map(s => `
+    <tr class="border-b">
+      <td class="py-1.5 px-2">${escapeHtml(s.seat)}</td>
+      <td class="py-1.5 px-2">${escapeHtml(s.name||"")} ${s.hideName?'<span class="text-xs text-slate-400">(隱藏)</span>':''}</td>
+      <td class="py-1.5 px-2 font-mono text-xs">${escapeHtml(s.password||"")}</td>
+      <td class="py-1.5 px-2 text-right whitespace-nowrap"><button onclick="editStudent('${s.id}')" class="text-blue-600 text-xs underline">編輯</button><button onclick="delStudent('${s.id}','${escapeHtml(s.seat)}')" class="text-rose-600 text-xs underline ml-2">刪除</button></td>
+    </tr>`).join("");
+  body.innerHTML = `
+    <div class="space-y-5">
+      <div class="flex items-center justify-between"><h4 class="font-bold text-sm">學生名單（${APP_STATE.students.length} 人）</h4><button onclick="editStudent()" class="btn3d b-blue text-xs">＋ 新增單筆</button></div>
+      <div class="overflow-x-auto border rounded-xl"><table class="w-full text-sm"><thead class="bg-slate-50 text-slate-500 text-xs"><tr><th class="py-2 px-2 text-left">座號</th><th class="py-2 px-2 text-left">姓名</th><th class="py-2 px-2 text-left">密碼</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-center py-4 text-slate-400">尚無學生</td></tr>'}</tbody></table></div>
+      <div class="border-t pt-4 space-y-2">
+        <h4 class="font-bold text-sm">📋 批次匯入學生帳號</h4>
+        <p class="text-xs text-slate-500">每行一位，格式：<code>座號,姓名,密碼</code>（逗號或 Tab 分隔）。例：<br/><code>01,王小明,123456</code></p>
+        <textarea id="bulkStu" class="w-full border rounded-xl p-3 text-xs font-mono" style="min-height:120px" placeholder="01,王小明,123456&#10;02,李小美,654321"></textarea>
+        <button id="doBulkStu" class="btn3d b-emerald w-full text-sm">執行批次匯入</button>
+      </div>
+    </div>`;
+  document.getElementById("doBulkStu").onclick = bulkImportStudents;
+}
+function editStudent(id) {
+  const s = id ? APP_STATE.students.find(x => x.id === id) : {};
+  showModal(`
+    <div class="p-6 space-y-3">
+      <h3 class="font-bold text-lg">${id?"編輯":"新增"}學生</h3>
+      <div><label class="text-sm">座號</label><input id="esSeat" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(s?.seat||"")}" ${id?"readonly":""} /></div>
+      <div><label class="text-sm">姓名</label><input id="esName" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(s?.name||"")}" /></div>
+      <div><label class="text-sm">密碼</label><input id="esPwd" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(s?.password||"")}" /></div>
+      <label class="flex items-center gap-2 text-sm"><input id="esHide" type="checkbox" ${s?.hideName?"checked":""}/> 前台隱藏姓名</label>
+      <div class="flex gap-2 justify-end pt-2"><button onclick="openAdmin()" class="px-4 py-2 rounded-xl bg-slate-100 text-sm">返回</button><button id="esSave" class="btn3d b-blue text-sm">儲存</button></div>
+    </div>`, { size: "max-w-sm", noBackdropClose: true });
+  document.getElementById("esSave").onclick = async () => {
+    const seat = document.getElementById("esSeat").value.trim();
+    if (!seat) { toast("請輸入座號", "warn"); return; }
+    const data = { seat, name: document.getElementById("esName").value.trim(), password: document.getElementById("esPwd").value, hideName: document.getElementById("esHide").checked };
+    try { await db.collection("students").doc(seat).set(data, { merge: true }); toast("已儲存", "success"); openAdmin(); adminGoTab(1); }
+    catch (e) { toast("儲存失敗：" + e.message, "error"); }
+  };
+}
+async function delStudent(id, seat) {
+  if (!await confirmDialog("刪除學生", `確定刪除座號 ${seat} 嗎？`, { okText: "刪除", danger: true })) return;
+  try { await db.collection("students").doc(id).delete(); toast("已刪除", "info"); openAdmin(); adminGoTab(1); }
+  catch (e) { toast("刪除失敗：" + e.message, "error"); }
+}
+async function bulkImportStudents() {
+  const text = document.getElementById("bulkStu").value.trim();
+  if (!text) { toast("請先貼上名單", "warn"); return; }
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean), parsed = [], errors = [];
+  lines.forEach((ln, i) => {
+    const parts = ln.includes("\t") ? ln.split("\t") : ln.split(",");
+    const seat = (parts[0]||"").trim();
+    if (!seat) { errors.push(i+1); return; }
+    parsed.push({ seat, name: (parts[1]||"").trim(), password: (parts[2]||"").trim(), hideName: false });
+  });
+  if (errors.length) { toast(`第 ${errors.join("、")} 行格式有誤（缺座號）`, "error"); return; }
+  if (!await confirmDialog("批次匯入", `將匯入／更新 ${parsed.length} 位學生，確定？`, { okText: "匯入" })) return;
+  try { const batch = db.batch(); parsed.forEach(s => batch.set(db.collection("students").doc(s.seat), s, { merge: true })); await batch.commit(); toast(`成功匯入 ${parsed.length} 位學生`, "success"); openAdmin(); adminGoTab(1); }
+  catch (e) { toast("匯入失敗：" + e.message, "error"); }
+}
+
+/* ── 後台：聯絡簿 ── */
+function adminContactbook(body) {
+  const date = document.getElementById("cbDate")?.value || todayStr();
+  body.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center gap-2"><label class="text-sm font-medium">日期</label><input type="date" id="acbDate" value="${date}" class="border rounded-xl px-2 py-1 text-sm" /></div>
+      <div>
+        <label class="text-sm font-medium">聯絡簿內容</label>
+        <p class="text-xs text-slate-400 mb-1">支援 **粗體**、行首 - 清單、自動連結化網址。<b>每一行作業（行首 -）會成為「作業檢核」的欄位。</b></p>
+        <textarea id="acbContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:160px" placeholder="今日作業：&#10;- 國語習作 P.10&#10;- 數學訂正"></textarea>
+      </div>
+      <button id="acbSave" class="btn3d b-blue w-full">發布／更新聯絡簿</button>
+      <div class="border-t pt-4"><h4 class="font-bold text-sm mb-2">📊 已讀報表（<span id="acbReportDate">${date}</span>）</h4><div id="acbReport" class="text-sm text-slate-500">載入中…</div></div>
+    </div>`;
+  const dateEl = document.getElementById("acbDate");
+  const load = () => { const d = dateEl.value; document.getElementById("acbReportDate").textContent = d; db.collection("contactbook").doc(d).get().then(doc => { document.getElementById("acbContent").value = doc.exists ? (doc.data().content || "") : ""; renderReadReport(doc.exists ? (doc.data().reads || {}) : {}); }); };
+  dateEl.onchange = load; load();
+  document.getElementById("acbSave").onclick = async () => {
+    const d = dateEl.value;
+    try { await db.collection("contactbook").doc(d).set({ content: document.getElementById("acbContent").value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); toast("聯絡簿已發布", "success"); }
+    catch (e) { toast("發布失敗：" + e.message, "error"); }
+  };
+}
+function renderReadReport(reads) {
+  const box = document.getElementById("acbReport"); if (!box) return;
+  box.innerHTML = readReportHtml(reads);
+}
+
+/* ── 後台：作業檢核 ── */
+let hwAdminUnsub = null;
+function adminHomework(body) {
+  body.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center gap-2 flex-wrap">
+        <label class="text-sm font-medium">檢核日期</label>
+        <input type="date" id="hwDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm" />
+        <button id="hwReload" class="btn3d b-amber text-xs">↻ 依前一上課日聯絡簿載入作業</button>
+      </div>
+      <div id="hwSource" class="text-xs text-slate-500"></div>
+      <div class="hw-legend text-xs text-slate-500"><span><i class="hw-dot hw-0"></i>未繳交</span><span><i class="hw-dot hw-1"></i>已繳交</span><span><i class="hw-dot hw-2"></i>待訂正</span><span><i class="hw-dot hw-3"></i>已訂正</span></div>
+      <div id="hwTableBox" class="overflow-x-auto">載入中…</div>
+      <p class="text-xs text-slate-400">點擊欄位循環切換：未繳交 → 已繳交 → 待訂正 → 已訂正。家長登入後可即時看到此表。</p>
+    </div>`;
+  const dateEl = document.getElementById("hwDate");
+  const load = async (forceReload) => {
+    if (hwAdminUnsub) hwAdminUnsub();
+    const d = dateEl.value;
+    const doc = await db.collection("homework").doc(d).get();
+    let data = doc.exists ? doc.data() : null;
+    if (forceReload || !data || !(data.items || []).length) {
+      let prev;
+      try { prev = await findPrevContactbook(d); }
+      catch (err) { if (err.message === "__INDEX__") return; toast("讀取失敗：" + err.message, "error"); return; }
+      const items = prev ? extractHomework(prev.content) : [];
+      const payload = { sourceDate: prev ? prev.date : null, items, status: (data && data.status) || {} };
+      await db.collection("homework").doc(d).set({ sourceDate: payload.sourceDate, items: payload.items }, { merge: true });
+      if (!prev) toast("查無前一上課日的聯絡簿內容，請先在「聯絡簿」分頁發布內容。", "warn");
+    }
+    hwAdminUnsub = db.collection("homework").doc(d).onSnapshot(s => renderHwAdminTable(d, s.exists ? s.data() : { items: [], status: {} }));
+  };
+  dateEl.onchange = () => load(false);
+  document.getElementById("hwReload").onclick = () => load(true);
+  load(false);
+}
+function renderHwAdminTable(date, data) {
+  const box = document.getElementById("hwTableBox"); if (!box) return;
+  const items = data.items || [], status = data.status || {}, src = document.getElementById("hwSource");
+  if (src) src.innerHTML = data.sourceDate ? `作業來源：<b>${escapeHtml(data.sourceDate)}</b> 聯絡簿（共 ${items.length} 項作業）` : '<span class="text-rose-500">查無前一上課日的聯絡簿，請點上方「↻ 載入」或先發布聯絡簿。</span>';
+  if (!items.length) { box.innerHTML = '<p class="text-slate-400 text-sm py-4">沒有可檢核的作業項目（聯絡簿請以「- 」開頭逐項列出作業）。</p>'; return; }
+  if (!APP_STATE.students.length) { box.innerHTML = '<p class="text-slate-400 text-sm py-4">尚無學生名單。</p>'; return; }
+  let html = '<table class="hw-table text-sm"><thead><tr><th class="hw-th-seat">座號</th>' + items.map(it => `<th class="hw-th">${escapeHtml(it)}</th>`).join("") + "</tr></thead><tbody>";
+  APP_STATE.students.forEach(st => {
+    html += `<tr><td class="hw-td-seat">${escapeHtml(st.seat)} ${escapeHtml(st.hideName?"":(st.name||""))}</td>`;
+    items.forEach((it, idx) => { const key = st.seat + "_" + idx, cur = status[key] || 0; html += `<td><button class="hw-cell hw-clickable hw-${cur}" onclick="cycleHw('${date}','${escapeHtml(String(st.seat))}',${idx},${cur})">${HW_STATES[cur].label}</button></td>`; });
+    html += "</tr>";
+  });
+  html += "</tbody></table>";
+  box.innerHTML = html;
+}
+async function cycleHw(date, seat, idx, cur) {
+  const next = (Number(cur) + 1) % 4;
+  try { await db.collection("homework").doc(date).set({ status: { [seat + "_" + idx]: next } }, { merge: true }); }
+  catch (e) { toast("更新失敗：" + e.message, "error"); }
+}
+
+/* ── 後台：公告 ── */
+function adminAnnouncements(body) {
+  const list = ANN_DATA.map(a => `
+    <div class="border rounded-xl p-3 flex items-center justify-between gap-2">
+      <div class="min-w-0"><div class="font-medium text-sm truncate">${escapeHtml(a.title||"公告")} ${a.hidden?'<span class="text-xs text-slate-400">(隱藏)</span>':''}</div><div class="text-xs text-slate-400 truncate">${escapeHtml((a.content||"").slice(0,40))}</div></div>
+      <div class="flex gap-2 shrink-0"><button onclick="toggleAnn('${a.id}',${!a.hidden})" class="text-xs text-amber-600 underline">${a.hidden?"顯示":"隱藏"}</button><button onclick="delAnn('${a.id}')" class="text-xs text-rose-600 underline">刪除</button></div>
+    </div>`).join("");
+  body.innerHTML = `
+    <div class="space-y-4">
+      <h4 class="font-bold text-sm">新增公告</h4>
+      <input id="annTitle" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="公告標題" />
+      <textarea id="annContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:100px" placeholder="內文（可貼網址自動連結、**粗體**）"></textarea>
+      <div><label class="text-sm font-medium block mb-1">附加圖片（自動壓縮）</label><input id="annImgs" type="file" accept="image/*" multiple class="text-sm" /><div id="annPreview" class="flex flex-wrap gap-2 mt-2"></div></div>
+      <button id="annSave" class="btn3d b-rose w-full">發布公告</button>
+      <div class="border-t pt-4 space-y-2"><h4 class="font-bold text-sm">現有公告</h4>${list || '<p class="text-slate-400 text-sm">尚無公告</p>'}</div>
+    </div>`;
+  let pendingImgs = [];
+  document.getElementById("annImgs").onchange = async (e) => {
+    pendingImgs = []; const prev = document.getElementById("annPreview"); prev.innerHTML = '<span class="text-xs text-slate-400">壓縮中…</span>';
+    for (const f of e.target.files) pendingImgs.push(await compressImage(f));
+    prev.innerHTML = pendingImgs.map(s => `<img src="${s}" class="w-16 h-16 object-cover rounded" />`).join("");
+  };
+  document.getElementById("annSave").onclick = async () => {
+    const title = document.getElementById("annTitle").value.trim();
+    if (!title) { toast("請輸入標題", "warn"); return; }
+    try { await db.collection("announcements").add({ title, content: document.getElementById("annContent").value, images: pendingImgs, hidden: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("公告已發布", "success"); openAdmin(); adminGoTab(4); }
+    catch (e) { toast("發布失敗：" + e.message, "error"); }
+  };
+}
+async function toggleAnn(id, hidden) { await db.collection("announcements").doc(id).update({ hidden }); toast(hidden?"已隱藏":"已顯示","info"); openAdmin(); adminGoTab(4); }
+async function delAnn(id) { if (!await confirmDialog("刪除公告","確定刪除此公告？",{okText:"刪除",danger:true})) return; await db.collection("announcements").doc(id).delete(); toast("已刪除","info"); openAdmin(); adminGoTab(4); }
+
+/* ── 後台：日曆 ── */
+const AI_PROMPT = `你現在是一位細心的國中小班級行政助手。我會提供你一段混雜、零散的班級行事曆或課務通知文字，請幫我抽取出裡面的「重要活動、日期、描述與相關網址」，並嚴格依照下方的【固定格式】輸出。
+
+【固定格式要求】
+1. 每一個活動單獨佔據一行。
+2. 欄位順序必須為：年/月/日,活動名稱,詳細描述與提醒文字,網址
+3. 各欄位之間請使用英文半形逗號（,）進行區隔（你也可以使用 Tab 鍵分隔）。
+4. 若該活動「沒有提供網址」，則第四個欄位請保持留空（但其前方的逗號仍要保留）。
+5. 輸出的年份請一律使用西元年（若原始文字只有寫幾月幾號，請預設為 2026 年）。
+6. 除了符合格式的行數外，不要輸出任何多餘的解釋、前言、後記或 Markdown 標籤（如 \`\`\`）。
+
+【輸出格式範例】
+2026/10/05,電腦課作業繳交,請記得上傳Scratch專案,[https://scratch.mit.edu](https://scratch.mit.edu)
+2026/10/10,雙十國慶放假,全國放假一天，請注意秋季出遊安全。,
+
+【我的原始行事曆文字如下】：
+----------
+（請在此處貼上你從 LINE 群組、校網公告或聯絡簿草稿複製過來的雜亂活動文字）
+----------`;
+function adminCalendar(body) {
+  const list = APP_STATE.calEvents.slice().sort((a,b)=> normDate(a.date)<normDate(b.date)?-1:1).map(e => `
+    <div class="border rounded-xl p-2 flex items-center justify-between gap-2 text-sm"><div class="min-w-0"><span class="text-violet-600 text-xs">${escapeHtml(normDate(e.date))}</span> <span class="font-medium">${escapeHtml(e.title||"")}</span></div><button onclick="delEvent('${e.id}')" class="text-rose-600 text-xs underline shrink-0">刪除</button></div>`).join("");
+  body.innerHTML = `
+    <div class="space-y-4">
+      <h4 class="font-bold text-sm">新增單筆活動</h4>
+      <div class="grid grid-cols-2 gap-2"><input id="evDate" type="date" class="border rounded-xl px-2 py-2 text-sm" /><input id="evTitle" class="border rounded-xl px-3 py-2 text-sm" placeholder="活動名稱" /></div>
+      <textarea id="evDesc" class="w-full border rounded-xl p-2 text-sm" placeholder="詳細描述（選填）"></textarea>
+      <input id="evUrl" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="超連結 URL（選填）" />
+      <button id="evSave" class="btn3d b-blue w-full text-sm">新增活動</button>
+      <div class="border-t pt-4 space-y-2">
+        <h4 class="font-bold text-sm">📋 批次文字匯入活動</h4>
+        <p class="text-xs text-slate-500">每行一活動：<code>年/月/日,活動名稱,詳細描述,超連結(選填)</code>，逗號或 Tab 分隔。</p>
+        <textarea id="bulkEv" class="w-full border rounded-xl p-2 text-xs font-mono" style="min-height:110px" placeholder="2026/09/15,第一次定期評量,請準備國數複習,https://school.edu.tw/exam&#10;2026/09/28	教師節活動	請穿運動服8:10操場集合	"></textarea>
+        <button id="doBulkEv" class="btn3d b-emerald w-full text-sm">執行匯入</button>
+      </div>
+      <div class="border-t pt-4 bg-indigo-50 -mx-2 px-3 py-3 rounded-xl">
+        <div class="flex items-center justify-between"><h4 class="font-bold text-sm">🤖 AI 助手提示詞</h4><button id="copyPrompt" class="btn3d b-indigo text-xs">一鍵複製 Prompt</button></div>
+        <p class="text-xs text-slate-500 mt-1">複製後貼給 Gemini 等 AI 整理雜亂行事曆，再把結果貼回上方批次匯入框。</p>
+      </div>
+      <div class="border-t pt-4 space-y-1"><h4 class="font-bold text-sm">現有活動（${APP_STATE.calEvents.length}）</h4>${list || '<p class="text-slate-400 text-sm">尚無活動</p>'}</div>
+    </div>`;
+  document.getElementById("evSave").onclick = async () => {
+    const d = document.getElementById("evDate").value, t = document.getElementById("evTitle").value.trim();
+    if (!d || !t) { toast("請填日期與名稱", "warn"); return; }
+    try { await db.collection("calendar").add({ date: normDate(d), title: t, desc: document.getElementById("evDesc").value, url: document.getElementById("evUrl").value.trim() }); toast("已新增活動","success"); openAdmin(); adminGoTab(5); }
+    catch (e) { toast("失敗：" + e.message, "error"); }
+  };
+  document.getElementById("doBulkEv").onclick = bulkImportEvents;
+  document.getElementById("copyPrompt").onclick = () => copyText(AI_PROMPT, "已複製 AI 提示詞，快貼給 Gemini 試試！");
+}
+async function bulkImportEvents() {
+  const text = document.getElementById("bulkEv").value.trim();
+  if (!text) { toast("請先貼上活動資料", "warn"); return; }
+  const lines = text.split("\n").map(l=>l.replace(/\s+$/,"")).filter(l=>l.trim()), parsed = [], errors = [];
+  lines.forEach((ln, i) => {
+    const parts = ln.includes("\t") ? ln.split("\t") : ln.split(",");
+    const dateRaw = (parts[0]||"").trim();
+    if (!/^\d{4}\D+\d{1,2}\D+\d{1,2}$/.test(dateRaw)) { errors.push(i+1); return; }
+    let url = (parts[3]||"").trim(); const mdMatch = url.match(/\((https?:\/\/[^)]+)\)/); if (mdMatch) url = mdMatch[1];
+    parsed.push({ date: normDate(dateRaw), title: (parts[1]||"").trim(), desc: (parts[2]||"").trim(), url });
+  });
+  if (errors.length) { toast(`第 ${errors.join("、")} 行格式有誤，請修正日期格式`, "error"); return; }
+  if (!parsed.length) { toast("沒有有效活動", "warn"); return; }
+  if (!await confirmDialog("匯入活動", `將新增 ${parsed.length} 筆活動，確定？`, { okText: "匯入" })) return;
+  try { const batch = db.batch(); parsed.forEach(e => batch.set(db.collection("calendar").doc(), e)); await batch.commit(); toast(`成功匯入 ${parsed.length} 筆活動`, "success"); openAdmin(); adminGoTab(5); }
+  catch (e) { toast("匯入失敗：" + e.message, "error"); }
+}
+async function delEvent(id) { if (!await confirmDialog("刪除活動","確定刪除？",{okText:"刪除",danger:true})) return; await db.collection("calendar").doc(id).delete(); toast("已刪除","info"); openAdmin(); adminGoTab(5); }
+
+/* ── 後台：回條 ── */
+function adminSlips(body) {
+  const list = SLIP_DATA.map(s => {
+    const subs = SUB_DATA.filter(x => x.slipId === s.id), submitted = subs.length;
+    return `<div class="border rounded-xl p-3 space-y-2">
+      <div class="flex items-center justify-between"><div><span class="font-medium text-sm">${escapeHtml(s.name||"回條")}</span> <span class="text-xs text-slate-400">截止 ${escapeHtml(s.deadline||"—")}</span></div><div class="flex gap-2"><button onclick="exportSlip('${s.id}')" class="text-xs text-emerald-600 underline">匯出清單</button><button onclick="delSlip('${s.id}')" class="text-xs text-rose-600 underline">刪除</button></div></div>
+      <div class="text-xs text-slate-500">已繳 ${submitted}/${APP_STATE.students.length}
+        ${APP_STATE.students.map(st=>{ const sub=subs.find(x=>String(x.seat)===String(st.seat)); const cls=!sub?"bg-slate-100 text-slate-400":sub.status==="approved"?"bg-emerald-100 text-emerald-700":sub.status==="rejected"?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700"; return `<button onclick="reviewSub('${s.id}','${st.seat}')" class="inline-block ${cls} rounded px-1.5 py-0.5 m-0.5">${escapeHtml(st.seat)}</button>`; }).join("")}
+      </div></div>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="space-y-4">
+      <h4 class="font-bold text-sm">建立回條項目</h4>
+      <input id="slipName" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="回條名稱（如：防震演練家長簽章）" />
+      <div class="flex items-center gap-2"><label class="text-sm">截止日</label><input id="slipDl" type="date" class="border rounded-xl px-2 py-1 text-sm" /></div>
+      <button id="slipSave" class="btn3d b-blue w-full">建立回條</button>
+      <div class="border-t pt-4 space-y-2"><h4 class="font-bold text-sm">回條進度（點座號審核）</h4><p class="text-xs text-slate-400">綠=通過　黃=待審　紅=退回　灰=未繳</p>${list || '<p class="text-slate-400 text-sm">尚無回條</p>'}</div>
+    </div>`;
+  document.getElementById("slipSave").onclick = async () => {
+    const name = document.getElementById("slipName").value.trim();
+    if (!name) { toast("請輸入回條名稱", "warn"); return; }
+    try { await db.collection("slips").add({ name, deadline: document.getElementById("slipDl").value, hidden:false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("回條已建立","success"); openAdmin(); adminGoTab(6); }
+    catch (e) { toast("建立失敗："+e.message,"error"); }
+  };
+}
+function reviewSub(slipId, seat) {
+  const sub = SUB_DATA.find(x => x.slipId === slipId && String(x.seat) === String(seat));
+  if (!sub) { toast(`座號 ${seat} 尚未繳交`, "info"); return; }
+  showModal(`
+    <div class="p-5 space-y-3">
+      <div class="flex items-center justify-between"><h3 class="font-bold">審核：${escapeHtml(seat)}號 ${escapeHtml(sub.name||"")}</h3><button onclick="closeModal()" class="text-slate-400 text-xl">×</button></div>
+      <img src="${sub.image}" class="w-full rounded-xl border" />
+      <div class="flex gap-2"><button id="appr" class="btn3d b-emerald flex-1">✅ 審核通過</button><button id="rej" class="btn3d b-rose flex-1">❌ 退回</button></div>
+    </div>`, { size: "max-w-md" });
+  document.getElementById("appr").onclick = async () => { await db.collection("slipSubmissions").doc(sub.id).update({ status:"approved", reason:"" }); toast("已通過","success"); closeModal(); };
+  document.getElementById("rej").onclick = () => {
+    showModal(`<div class="p-5 space-y-3"><h3 class="font-bold">退回原因</h3><input id="rejReason" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="如：照片模糊，請重拍" /><div class="flex justify-end gap-2"><button onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-sm">取消</button><button id="rejOk" class="btn3d b-rose text-sm">確定退回</button></div></div>`, { size:"max-w-sm" });
+    document.getElementById("rejOk").onclick = async () => { await db.collection("slipSubmissions").doc(sub.id).update({ status:"rejected", reason: document.getElementById("rejReason").value.trim() }); toast("已退回","info"); closeModal(); };
+  };
+}
+async function delSlip(id) {
+  if (!await confirmDialog("刪除回條","確定刪除此回條項目？相關繳交紀錄不會自動刪除。",{okText:"刪除",danger:true})) return;
+  await db.collection("slips").doc(id).delete(); toast("已刪除","info"); openAdmin(); adminGoTab(6);
+}
+function exportSlip(slipId) {
+  const slip = SLIP_DATA.find(s => s.id === slipId), subs = SUB_DATA.filter(x => x.slipId === slipId);
+  const rows = [["座號","姓名","狀態","退回原因"]];
+  APP_STATE.students.forEach(st => { const sub = subs.find(x => String(x.seat) === String(st.seat)); const status = !sub ? "未繳交" : sub.status === "approved" ? "已通過" : sub.status === "rejected" ? "已退回" : "待審核"; rows.push([st.seat, st.name||"", status, sub?.reason||""]); });
+  const csv = "﻿" + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${slip?.name||"回條"}_繳交清單.csv`; a.click();
+  toast("清單已下載", "success");
+}
+
+/* ════════════════════ 模組：資源充電站 ════════════════════ */
+function setupResources() {
+  db.collection("resources").onSnapshot(snap => { RES_DATA = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderResources(); }, err => console.warn("資源監聽失敗", err));
+}
+function renderResources() {
+  const locked = document.getElementById("resLocked"), list = document.getElementById("resList");
+  if (!list) return;
+  if (!canView("resources")) { locked.classList.remove("hidden"); list.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); list.classList.remove("hidden");
+  if (!RES_DATA.length) { list.innerHTML = '<p class="text-center text-slate-400 text-sm py-6">尚無學習資源連結。</p>'; return; }
+  const cats = [...new Set(RES_DATA.map(r => r.category || "未分類"))];
+  list.innerHTML = cats.map(cat => {
+    const items = RES_DATA.filter(r => (r.category || "未分類") === cat);
+    return `<div>
+      <div class="text-sm font-bold text-emerald-700 mb-2 flex items-center gap-1">🔖 ${escapeHtml(cat)}</div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${items.map(r => `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" class="res-card">${escapeHtml(r.name || "連結")}</a>`).join("")}</div>
+    </div>`;
+  }).join("");
+}
+/* 後台：資源連結管理 */
+function adminResources(body) {
+  const cats = [...new Set(RES_DATA.map(r => r.category || "未分類"))];
+  const list = RES_DATA.length ? cats.map(cat => {
+    const items = RES_DATA.filter(r => (r.category || "未分類") === cat);
+    return `<div class="space-y-1"><div class="text-xs font-bold text-emerald-700">${escapeHtml(cat)}</div>${items.map(r => `
+      <div class="flex items-center justify-between border rounded-lg p-2 text-sm gap-2">
+        <div class="min-w-0"><div class="font-medium truncate">${escapeHtml(r.name || "")}</div><div class="text-xs text-slate-400 truncate">${escapeHtml(r.url || "")}</div></div>
+        <div class="flex gap-2 shrink-0"><button onclick="editResource('${r.id}')" class="text-blue-600 text-xs underline">編輯</button><button onclick="delResource('${r.id}')" class="text-rose-600 text-xs underline">刪除</button></div>
+      </div>`).join("")}</div>`;
+  }).join("") : '<p class="text-slate-400 text-sm">尚無資源</p>';
+  body.innerHTML = `<div class="space-y-4"><div class="flex items-center justify-between"><h4 class="font-bold text-sm">學習資源連結（${RES_DATA.length}）</h4><button onclick="editResource()" class="btn3d b-emerald text-xs">＋ 新增連結</button></div>${list}</div>`;
+}
+function editResource(id, fromQuick) {
+  const r = id ? RES_DATA.find(x => x.id === id) : {};
+  const cats = [...new Set(RES_DATA.map(x => x.category).filter(Boolean))];
+  showModal(`
+    <div class="p-6 space-y-3">
+      <h3 class="font-bold text-lg">${id ? "編輯" : "新增"}學習資源</h3>
+      <div><label class="text-sm">資源名稱</label><input id="erName" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(r?.name || "")}" placeholder="例：因材網"></div>
+      <div><label class="text-sm">資源網址 (URL)</label><input id="erUrl" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(r?.url || "")}" placeholder="https://..."></div>
+      <div><label class="text-sm">分類分組</label><input id="erCat" list="erCats" class="w-full mt-1 border rounded-xl px-3 py-2 text-sm" value="${escapeHtml(r?.category || "")}" placeholder="例：常用線上平台"><datalist id="erCats">${cats.map(c => `<option value="${escapeHtml(c)}">`).join("")}</datalist></div>
+      <div class="flex gap-2 justify-end pt-2">
+        <button onclick="${fromQuick ? "closeModal()" : "openAdmin();adminGoTab(8)"}" class="px-4 py-2 rounded-xl bg-slate-100 text-sm">${fromQuick ? "取消" : "返回"}</button>
+        <button id="erSave" class="btn3d b-emerald text-sm">儲存</button>
+      </div>
+    </div>`, { size: "max-w-sm", noBackdropClose: true });
+  document.getElementById("erSave").onclick = async () => {
+    const name = document.getElementById("erName").value.trim();
+    let url = document.getElementById("erUrl").value.trim();
+    const category = document.getElementById("erCat").value.trim() || "未分類";
+    if (!name || !url) { toast("請填寫名稱與網址", "warn"); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try {
+      if (id) await db.collection("resources").doc(id).set({ name, url, category }, { merge: true });
+      else await db.collection("resources").add({ name, url, category, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      toast("已儲存", "success");
+      if (fromQuick) closeModal(); else { openAdmin(); adminGoTab(8); }
+    } catch (e) { toast("儲存失敗：" + e.message, "error"); }
+  };
+}
+async function delResource(id) {
+  if (!await confirmDialog("刪除資源", "確定刪除此連結？", { okText: "刪除", danger: true })) return;
+  try { await db.collection("resources").doc(id).delete(); toast("已刪除", "info"); openAdmin(); adminGoTab(8); }
+  catch (e) { toast("刪除失敗：" + e.message, "error"); }
+}
+
+/* ════════════════════ 模組：今日小考成績 ════════════════════ */
+function setupQuiz() {
+  db.collection("quizIndex").doc("dates").onSnapshot(doc => {
+    QUIZ_DATES = (doc.exists ? (doc.data().list || []) : []).slice().sort().reverse();
+    populateQuizDates();
+  }, err => console.warn("小考日期監聽失敗", err));
+}
+function populateQuizDates() {
+  const sel = document.getElementById("quizDate"); if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = QUIZ_DATES.length ? QUIZ_DATES.map(d => `<option value="${d}">${d}</option>`).join("") : '<option value="">（尚無紀錄）</option>';
+  if (QUIZ_DATES.includes(prev)) sel.value = prev; else if (QUIZ_DATES.length) sel.value = QUIZ_DATES[0];
+  sel.onchange = loadQuiz;
+  loadQuiz();
+}
+function loadQuiz() {
+  if (quizCurUnsub) quizCurUnsub();
+  const sel = document.getElementById("quizDate"); const d = sel ? sel.value : "";
+  if (!d) { QUIZ_CUR = null; renderQuiz(); return; }
+  quizCurUnsub = db.collection("quiz").doc(d).onSnapshot(doc => { QUIZ_CUR = doc.exists ? doc.data() : null; renderQuiz(); });
+}
+function renderQuiz() {
+  const locked = document.getElementById("quizLocked"), box = document.getElementById("quizBox");
+  if (!box) return;
+  if (!canView("quiz")) { locked.classList.remove("hidden"); box.classList.add("hidden"); return; }
+  locked.classList.add("hidden"); box.classList.remove("hidden");
+  if (!QUIZ_CUR || !(QUIZ_CUR.subjects || []).length) { box.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">此日期尚無小考成績。</p>'; return; }
+  const subjects = QUIZ_CUR.subjects, scores = QUIZ_CUR.scores || {};
+  if (APP_STATE.session && !APP_STATE.isTeacher) {
+    // 家長：嚴格隱私，只顯示自己孩子
+    const seat = String(APP_STATE.session.seat), my = scores[seat];
+    if (!my) { box.innerHTML = '<p class="text-slate-400 text-sm py-4 text-center">本日查無您孩子的小考成績。</p>'; return; }
+    const cards = subjects.map(s => `<div class="quiz-score"><div class="qs-sub">${escapeHtml(s)}</div><div class="qs-val">${escapeHtml(my[s] ?? "—")}</div></div>`).join("");
+    const comment = my.comment ? `<div class="mt-3 text-sm bg-white/70 border border-white/70 rounded-xl p-3"><b class="text-amber-700">老師評語：</b>${escapeHtml(my.comment)}</div>` : "";
+    box.innerHTML = `<div class="text-xs text-slate-500 mb-2">${escapeHtml(seat)}號 ${escapeHtml(APP_STATE.session.name || "")} ・ ${escapeHtml(QUIZ_CUR.date || "")}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${cards}</div>${comment}`;
+  } else {
+    // 老師：全班表格檢視
+    box.innerHTML = `<div class="overflow-x-auto"><table class="hw-table text-sm"><thead><tr><th class="hw-th-seat">座號</th>${subjects.map(s => `<th class="hw-th">${escapeHtml(s)}</th>`).join("")}<th class="hw-th">評語</th></tr></thead><tbody>${APP_STATE.students.map(st => {
+      const r = scores[String(st.seat)] || {};
+      return `<tr><td class="hw-td-seat">${escapeHtml(st.seat)} ${escapeHtml(st.hideName ? "" : (st.name || ""))}</td>${subjects.map(s => `<td class="text-center px-2">${escapeHtml(r[s] ?? "—")}</td>`).join("")}<td class="px-2 text-xs">${escapeHtml(r.comment || "")}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  }
+}
+
+/* 小考成績 AI 轉換提示詞 */
+const QUIZ_AI_PROMPT = `你現在是一位細心的國中小班級成績登錄助手。我會提供你某次小考的雜亂成績資料（可能來自手寫成績單的文字、語音輸入、或 LINE 群組訊息，例如：「1號95、2號80再加油、3號未到、5號100」）。請幫我整理成可批次匯入的【固定格式】。
+
+【固定格式要求】
+1. 第一行為「標題列」，第一欄固定是「座號」，接著是各個考試科目名稱，最後一欄固定是「評語」。
+   範例標題：座號,國語,數學,評語
+2. 第二行起，每一位學生一行，欄位順序與標題列一致。
+3. 各欄位之間請使用英文半形逗號（,）分隔（你也可以改用 Tab 鍵分隔）。
+4. 只輸出分數數字；若該生缺考/未到，分數欄請填「缺考」。
+5. 評語欄若沒有就留空（但前面的逗號仍要保留）。原始文字中若有鼓勵語（如「再加油」），請放到該生的評語欄。
+6. 科目名稱請依我提供的資料判斷；若我沒明講科目，就用「成績」當唯一科目。
+7. 除了符合格式的行數外，不要輸出任何多餘的解釋、前言、後記或 Markdown 標籤（如 \`\`\`）。
+
+【輸出格式範例】
+座號,國語,數學,評語
+1,95,80,
+2,80,75,再加油
+3,缺考,缺考,
+5,100,100,表現優異
+
+【我的原始小考成績資料如下】：
+----------
+（請在此處貼上你的手寫成績單文字、語音輸入內容，或 LINE 群組複製過來的雜亂分數）
+----------`;
+
+/* 解析小考批次匯入文字 → { subjects, scores } 或 { error } */
+function parseQuizImport(text) {
+  const lines = text.split("\n").map(l => l.replace(/\s+$/, "")).filter(l => l.trim());
+  if (lines.length < 2) return { error: "至少需要一行標題列與一行成績資料" };
+  const sep0 = lines[0].includes("\t") ? "\t" : ",";
+  const header = lines[0].split(sep0).map(h => h.trim());
+  if (!/座號|座号|號/.test(header[0])) return { error: "第 1 行需為標題列，且第一欄為「座號」" };
+  let commentIdx = -1;
+  header.forEach((h, i) => { if (/評語|評論|comment|備註/i.test(h)) commentIdx = i; });
+  const subjects = [];
+  header.forEach((h, i) => { if (i === 0 || i === commentIdx) return; if (h) subjects.push(h); });
+  const scores = {}, errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const sep = lines[i].includes("\t") ? "\t" : ",";
+    const cols = lines[i].split(sep).map(c => c.trim());
+    const seat = cols[0];
+    if (!seat) { errors.push(i + 1); continue; }
+    const rec = {};
+    header.forEach((h, ci) => { if (ci === 0) return; const val = cols[ci] || ""; if (ci === commentIdx) rec.comment = val; else if (h) rec[h] = val; });
+    scores[seat] = rec;
+  }
+  if (errors.length) return { error: `第 ${errors.join("、")} 行缺座號` };
+  return { subjects, scores };
+}
+/* 後台：小考成績管理 */
+function adminQuiz(body) {
+  const dates = QUIZ_DATES.slice();
+  body.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center gap-2"><label class="text-sm font-medium">考試日期</label><input type="date" id="qzDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
+      <div>
+        <label class="text-sm font-medium">批次匯入成績</label>
+        <p class="text-xs text-slate-400 mb-1">第一行為<b>標題列</b>（第一欄需為「座號」，最後一欄可放「評語」），其餘每行一位學生，逗號或 Tab 分隔。例：<br><code>座號,國語,數學,評語</code><br><code>1,95,80,繼續加油</code></p>
+        <textarea id="qzImport" class="w-full border rounded-xl p-3 text-xs font-mono" style="min-height:140px" placeholder="座號,國語,數學,評語&#10;1,95,80,繼續加油&#10;2,80,75,多練習&#10;3,缺考,缺考,"></textarea>
+      </div>
+      <button id="qzPublish" class="btn3d b-amber w-full">發布此日期成績</button>
+
+      <div class="border-t pt-4 space-y-2">
+        <h4 class="font-bold text-sm">✏️ 單筆輸入／修改</h4>
+        <div class="flex items-center gap-2"><label class="text-sm">日期</label><input type="date" id="qsDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
+        <div>
+          <label class="text-sm">科目（逗號分隔，可改）</label>
+          <div class="flex gap-2 mt-1">
+            <input id="qsSubjects" class="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="例：國語,數學">
+            <button id="qsApply" class="btn3d b-amber text-xs whitespace-nowrap">套用科目</button>
+          </div>
+        </div>
+        <div id="qsForm" class="hidden space-y-2"></div>
+      </div>
+
+      <div class="border-t pt-4 bg-indigo-50 -mx-2 px-3 py-3 rounded-xl">
+        <div class="flex items-center justify-between"><h4 class="font-bold text-sm">🤖 AI 成績轉換助手</h4><button id="qzCopyPrompt" class="btn3d b-indigo text-xs">一鍵複製 Prompt</button></div>
+        <p class="text-xs text-slate-500 mt-1">複製後貼給 Gemini，再附上手寫成績單照片／語音輸入／LINE 雜亂文字，AI 會轉成上方格式，貼回匯入框即可一次發布。</p>
+      </div>
+      <div class="border-t pt-4 space-y-1"><h4 class="font-bold text-sm">已發布日期（${dates.length}）</h4>${dates.length ? dates.map(d => `<div class="flex items-center justify-between border rounded-lg p-2 text-sm"><span>${escapeHtml(d)}</span><div class="flex gap-2"><button onclick="loadQuizToImport('${d}')" class="text-blue-600 text-xs underline">載入編輯</button><button onclick="delQuiz('${d}')" class="text-rose-600 text-xs underline">刪除</button></div></div>`).join("") : '<p class="text-slate-400 text-sm">尚無紀錄</p>'}</div>
+    </div>`;
+  document.getElementById("qzPublish").onclick = () => publishQuiz(false);
+  document.getElementById("qzCopyPrompt").onclick = () => copyText(QUIZ_AI_PROMPT, "已複製 AI 提示詞，快貼給 Gemini！");
+  document.getElementById("qsDate").onchange = loadQsDate;
+  document.getElementById("qsApply").onclick = applyQsSubjects;
+  loadQsDate();
+}
+/* 單筆輸入：載入該日期已存在的科目與成績 */
+async function loadQsDate() {
+  const d = document.getElementById("qsDate")?.value;
+  const subjInput = document.getElementById("qsSubjects"), form = document.getElementById("qsForm");
+  if (!d) return;
+  try {
+    const doc = await db.collection("quiz").doc(d).get();
+    QS_CACHE = doc.exists ? { subjects: doc.data().subjects || [], scores: doc.data().scores || {} } : { subjects: [], scores: {} };
+  } catch (e) { QS_CACHE = { subjects: [], scores: {} }; }
+  if (subjInput) subjInput.value = QS_CACHE.subjects.join(",");
+  if (QS_CACHE.subjects.length) renderQuizSingleForm(QS_CACHE.subjects);
+  else if (form) { form.classList.add("hidden"); form.innerHTML = ""; }
+}
+/* 套用科目欄位 */
+function applyQsSubjects() {
+  const raw = document.getElementById("qsSubjects")?.value || "";
+  const subjects = raw.split(/[,，、\t]/).map(s => s.trim()).filter(Boolean);
+  if (!subjects.length) { toast("請至少輸入一個科目", "warn"); return; }
+  QS_CACHE.subjects = subjects;
+  renderQuizSingleForm(subjects);
+}
+/* 渲染單筆輸入表單 */
+function renderQuizSingleForm(subjects) {
+  const box = document.getElementById("qsForm"); if (!box) return;
+  if (!APP_STATE.students.length) { box.classList.remove("hidden"); box.innerHTML = '<p class="text-slate-400 text-sm">尚無學生名單，請先建立學生帳號。</p>'; return; }
+  box.classList.remove("hidden");
+  const seatOpts = APP_STATE.students.map(s => `<option value="${s.seat}">${s.seat}號${s.hideName ? "" : (s.name ? " " + s.name : "")}</option>`).join("");
+  box.innerHTML = `
+    <div><label class="text-xs">座號</label><select id="qsSeat" class="w-full border rounded-xl px-2 py-2 text-sm">${seatOpts}</select></div>
+    <div class="grid grid-cols-2 gap-2">${subjects.map(s => `<div><label class="text-xs">${escapeHtml(s)}</label><input data-subj="${escapeHtml(s)}" class="w-full border rounded-xl px-2 py-1.5 text-sm" placeholder="分數"></div>`).join("")}</div>
+    <div><label class="text-xs">評語</label><input id="qsComment" class="w-full border rounded-xl px-2 py-1.5 text-sm" placeholder="選填"></div>
+    <button id="qsSave" class="btn3d b-amber w-full text-sm">儲存此生成績</button>`;
+  document.getElementById("qsSeat").onchange = fillQsSeat;
+  fillQsSeat();
+  document.getElementById("qsSave").onclick = saveQuizSingle;
+}
+/* 切換座號時，帶入該生已輸入的成績 */
+function fillQsSeat() {
+  const seat = document.getElementById("qsSeat")?.value; if (!seat) return;
+  const rec = QS_CACHE.scores[seat] || {};
+  document.querySelectorAll("#qsForm [data-subj]").forEach(inp => { inp.value = rec[inp.dataset.subj] ?? ""; });
+  const c = document.getElementById("qsComment"); if (c) c.value = rec.comment || "";
+}
+/* 儲存單筆成績（merge 寫入，不影響其他學生與日期） */
+async function saveQuizSingle() {
+  const date = document.getElementById("qsDate")?.value;
+  const seat = document.getElementById("qsSeat")?.value;
+  if (!date || !seat) { toast("請選擇日期與座號", "warn"); return; }
+  const rec = {};
+  document.querySelectorAll("#qsForm [data-subj]").forEach(inp => { rec[inp.dataset.subj] = inp.value.trim(); });
+  rec.comment = (document.getElementById("qsComment")?.value || "").trim();
+  try {
+    await db.collection("quiz").doc(date).set({ date, subjects: QS_CACHE.subjects, scores: { [seat]: rec } }, { merge: true });
+    await db.collection("quizIndex").doc("dates").set({ list: firebase.firestore.FieldValue.arrayUnion(date) }, { merge: true });
+    QS_CACHE.scores[seat] = rec; // 更新快取，方便連續輸入下一位
+    toast(`已儲存 ${seat}號 成績`, "success");
+  } catch (e) { toast("儲存失敗：" + e.message, "error"); }
+}
+async function loadQuizToImport(d) {
+  try {
+    const doc = await db.collection("quiz").doc(d).get();
+    if (!doc.exists) { toast("查無資料", "warn"); return; }
+    const data = doc.data(), subjects = data.subjects || [], scores = data.scores || {};
+    const header = ["座號", ...subjects, "評語"].join(",");
+    const rows = Object.keys(scores).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(seat => {
+      const r = scores[seat]; return [seat, ...subjects.map(s => r[s] ?? ""), r.comment || ""].join(",");
+    });
+    document.getElementById("qzDate").value = d;
+    document.getElementById("qzImport").value = [header, ...rows].join("\n");
+    toast("已載入該日期成績，可修改後重新發布", "info");
+  } catch (e) { toast("載入失敗：" + e.message, "error"); }
+}
+async function publishQuiz(fromQuick) {
+  const date = document.getElementById("qzDate").value;
+  if (!date) { toast("請選擇考試日期", "warn"); return; }
+  const parsed = parseQuizImport(document.getElementById("qzImport").value);
+  if (parsed.error) { toast(parsed.error, "error"); return; }
+  if (!parsed.subjects.length) { toast("未偵測到任何科目欄位（標題列除了座號/評語外需至少一個科目）", "warn"); return; }
+  const cnt = Object.keys(parsed.scores).length;
+  if (!await confirmDialog("發布成績", `將發布 <b>${escapeHtml(date)}</b> 的小考成績（科目：${escapeHtml(parsed.subjects.join("、"))}，共 ${cnt} 位），確定？`, { okText: "發布" })) return;
+  try {
+    await db.collection("quiz").doc(date).set({ date, subjects: parsed.subjects, scores: parsed.scores, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection("quizIndex").doc("dates").set({ list: firebase.firestore.FieldValue.arrayUnion(date) }, { merge: true });
+    toast("成績已發布", "success");
+    if (fromQuick) closeModal(); else { openAdmin(); adminGoTab(9); }
+  } catch (e) { toast("發布失敗：" + e.message, "error"); }
+}
+async function delQuiz(d) {
+  if (!await confirmDialog("刪除成績", `確定刪除 ${d} 的小考成績？`, { okText: "刪除", danger: true })) return;
+  try {
+    await db.collection("quiz").doc(d).delete();
+    await db.collection("quizIndex").doc("dates").set({ list: firebase.firestore.FieldValue.arrayRemove(d) }, { merge: true });
+    toast("已刪除", "info"); openAdmin(); adminGoTab(9);
+  } catch (e) { toast("刪除失敗：" + e.message, "error"); }
+}
+
+/* ════════════════════ ★★ 主畫面教師快速新增（免進後台） ★★ ════════════════════ */
+
+/* 聯絡簿：編輯/發布 */
+function quickContactbook() {
+  const date = document.getElementById("cbDate")?.value || todayStr();
+  showModal(`
+    <div class="p-6 space-y-3">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-lg">✏️ 編輯聯絡簿</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <div class="flex items-center gap-2"><label class="text-sm">日期</label><input type="date" id="qcbDate" value="${date}" class="border rounded-xl px-2 py-1 text-sm"></div>
+      <p class="text-xs text-slate-400">支援 **粗體**、行首 - 清單、網址自動連結。行首「- 」的每行作業會成為作業檢核欄位。</p>
+      <textarea id="qcbContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:160px" placeholder="今日作業：&#10;- 國語習作 P.10&#10;- 數學訂正"></textarea>
+      <button id="qcbSave" class="btn3d b-blue w-full">發布／更新</button>
+    </div>`, { size: "max-w-md" });
+  const dateEl = document.getElementById("qcbDate"), ta = document.getElementById("qcbContent");
+  const load = () => db.collection("contactbook").doc(dateEl.value).get().then(d => { ta.value = d.exists ? (d.data().content || "") : ""; });
+  dateEl.onchange = load; load();
+  document.getElementById("qcbSave").onclick = async () => {
+    try { await db.collection("contactbook").doc(dateEl.value).set({ content: ta.value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); toast("聯絡簿已發布", "success"); closeModal(); }
+    catch (e) { toast("發布失敗：" + e.message, "error"); }
+  };
+}
+
+/* 作業檢核：依前一上課日聯絡簿建立今日檢核表 */
+async function quickHomework() {
+  const d = todayStr();
+  toast("讀取前一上課日作業中…", "info");
+  let prev;
+  try { prev = await findPrevContactbook(d); }
+  catch (err) { if (err.message === "__INDEX__") return; toast("讀取失敗：" + err.message, "error"); return; }
+  if (!prev) { toast("查無前一上課日的聯絡簿，請先編輯聯絡簿", "warn"); return; }
+  const items = extractHomework(prev.content);
+  if (!items.length) { toast("前一上課日聯絡簿沒有可檢核的作業項目（請用「- 」逐項列出）", "warn"); return; }
+  try {
+    const doc = await db.collection("homework").doc(d).get();
+    const status = doc.exists ? (doc.data().status || {}) : {};
+    await db.collection("homework").doc(d).set({ sourceDate: prev.date, items, status }, { merge: true });
+    toast(`已建立今日檢核（${items.length} 項作業），可按「立即檢核」點選狀態`, "success");
+  } catch (e) { toast("建立失敗：" + e.message, "error"); }
+}
+
+/* 日曆：新增活動 */
+function quickEvent() {
+  showModal(`
+    <div class="p-6 space-y-3">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-lg">➕ 新增活動</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <div class="grid grid-cols-2 gap-2"><input id="qevDate" type="date" class="border rounded-xl px-2 py-2 text-sm"><input id="qevTitle" class="border rounded-xl px-3 py-2 text-sm" placeholder="活動名稱"></div>
+      <textarea id="qevDesc" class="w-full border rounded-xl p-2 text-sm" placeholder="詳細描述（選填）"></textarea>
+      <input id="qevUrl" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="超連結 URL（選填）">
+      <button id="qevSave" class="btn3d b-indigo w-full">新增活動</button>
+    </div>`, { size: "max-w-md" });
+  document.getElementById("qevSave").onclick = async () => {
+    const d = document.getElementById("qevDate").value, t = document.getElementById("qevTitle").value.trim();
+    if (!d || !t) { toast("請填日期與名稱", "warn"); return; }
+    try { await db.collection("calendar").add({ date: normDate(d), title: t, desc: document.getElementById("qevDesc").value, url: document.getElementById("qevUrl").value.trim() }); toast("已新增活動", "success"); closeModal(); }
+    catch (e) { toast("失敗：" + e.message, "error"); }
+  };
+}
+
+/* 公告：新增（含圖片） */
+function quickAnnouncement() {
+  let imgs = [];
+  showModal(`
+    <div class="p-6 space-y-3">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-lg">➕ 新增公告</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <input id="qannTitle" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="公告標題">
+      <textarea id="qannContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:100px" placeholder="內文（可貼網址自動連結、**粗體**）"></textarea>
+      <div><label class="text-sm font-medium block mb-1">附加圖片（自動壓縮）</label><input id="qannImgs" type="file" accept="image/*" multiple class="text-sm"><div id="qannPrev" class="flex flex-wrap gap-2 mt-2"></div></div>
+      <button id="qannSave" class="btn3d b-rose w-full">發布公告</button>
+    </div>`, { size: "max-w-md" });
+  document.getElementById("qannImgs").onchange = async (e) => {
+    imgs = []; const p = document.getElementById("qannPrev"); p.innerHTML = '<span class="text-xs text-slate-400">壓縮中…</span>';
+    for (const f of e.target.files) imgs.push(await compressImage(f));
+    p.innerHTML = imgs.map(s => `<img src="${s}" class="w-16 h-16 object-cover rounded">`).join("");
+  };
+  document.getElementById("qannSave").onclick = async () => {
+    const title = document.getElementById("qannTitle").value.trim();
+    if (!title) { toast("請輸入標題", "warn"); return; }
+    try { await db.collection("announcements").add({ title, content: document.getElementById("qannContent").value, images: imgs, hidden: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("公告已發布", "success"); closeModal(); }
+    catch (e) { toast("發布失敗：" + e.message, "error"); }
+  };
+}
+
+/* 資源充電站：新增連結 */
+function quickResource() { editResource(null, true); }
+
+/* 小考成績：發布（批次匯入 + 單筆輸入 + AI 提示詞） */
+function quickQuiz() {
+  showModal(`
+    <div class="p-6 space-y-3 overflow-y-auto">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-lg">➕ 發布小考成績</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+
+      <h4 class="font-bold text-sm">📋 批次匯入</h4>
+      <div class="flex items-center gap-2"><label class="text-sm">考試日期</label><input type="date" id="qzDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
+      <p class="text-xs text-slate-400">第一行為標題（首欄座號、末欄可放評語），其餘每行一位。例：<code>座號,國語,數學,評語</code></p>
+      <textarea id="qzImport" class="w-full border rounded-xl p-3 text-xs font-mono" style="min-height:120px" placeholder="座號,國語,數學,評語&#10;1,95,80,繼續加油&#10;2,80,75,多練習"></textarea>
+      <div class="flex gap-2">
+        <button onclick="copyText(QUIZ_AI_PROMPT,'已複製 AI 提示詞，快貼給 Gemini！')" class="btn3d b-indigo text-xs flex-1">🤖 複製 AI 提示詞</button>
+        <button id="qzPublish2" class="btn3d b-amber text-xs flex-1">發布成績</button>
+      </div>
+
+      <div class="border-t pt-3 space-y-2">
+        <h4 class="font-bold text-sm">✏️ 單筆輸入／修改</h4>
+        <div class="flex items-center gap-2"><label class="text-sm">日期</label><input type="date" id="qsDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
+        <div>
+          <label class="text-sm">科目（逗號分隔，可改）</label>
+          <div class="flex gap-2 mt-1">
+            <input id="qsSubjects" class="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="例：國語,數學">
+            <button id="qsApply" class="btn3d b-amber text-xs whitespace-nowrap">套用科目</button>
+          </div>
+        </div>
+        <div id="qsForm" class="hidden space-y-2"></div>
+      </div>
+    </div>`, { size: "max-w-md" });
+  document.getElementById("qzPublish2").onclick = () => publishQuiz(true);
+  document.getElementById("qsDate").onchange = loadQsDate;
+  document.getElementById("qsApply").onclick = applyQsSubjects;
+  loadQsDate();
+}
+
+/* 回條：建立項目 */
+function quickSlip() {
+  showModal(`
+    <div class="p-6 space-y-3">
+      <div class="flex items-center justify-between"><h3 class="font-bold text-lg">➕ 建立回條</h3><button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button></div>
+      <input id="qslipName" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="回條名稱（如：防震演練家長簽章）">
+      <div class="flex items-center gap-2"><label class="text-sm">截止日</label><input id="qslipDl" type="date" class="border rounded-xl px-2 py-1 text-sm"></div>
+      <button id="qslipSave" class="btn3d b-emerald w-full">建立回條</button>
+    </div>`, { size: "max-w-md" });
+  document.getElementById("qslipSave").onclick = async () => {
+    const name = document.getElementById("qslipName").value.trim();
+    if (!name) { toast("請輸入回條名稱", "warn"); return; }
+    try { await db.collection("slips").add({ name, deadline: document.getElementById("qslipDl").value, hidden: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("回條已建立", "success"); closeModal(); }
+    catch (e) { toast("建立失敗：" + e.message, "error"); }
+  };
+}
+
+/* ════════════════════ ★★ 私訊（家長聯絡老師） ★★ ════════════════════ */
+
+/* 資料更新時的統一刷新（依目前開啟的視窗重繪） */
+function onMessagesUpdate() {
+  updateFloatBadge();
+  updateTeacherFloat();
+  renderParentChatBody();
+  if (document.getElementById("admMsgArea")) renderAdminMsgArea();
+  if (document.getElementById("admThreadBody")) renderAdminThreadBody();
+}
+
+/* 訊息泡泡列；opts.recall=true 時顯示「收回」按鈕 */
+function msgBubble(m, mine, opts = {}) {
+  const t = m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString("zh-TW", { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "傳送中…";
+  const recall = opts.recall ? `<button onclick="recallMsg('${m.id}')" class="ml-2 text-[10px] underline ${mine ? "text-indigo-100" : "text-slate-400"} hover:opacity-75">收回</button>` : "";
+  return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+    <div class="max-w-[78%] ${mine ? "bg-indigo-500 text-white" : "bg-white text-slate-700 border"} rounded-2xl px-3 py-2 text-sm shadow-sm">
+      <div class="whitespace-pre-wrap break-words">${escapeHtml(m.text || "")}</div>
+      <div class="text-[10px] ${mine ? "text-indigo-100" : "text-slate-400"} mt-1 text-right">${mine ? "" : "老師 · "}${t}${recall}</div>
+    </div></div>`;
+}
+
+/* ── 家長端：浮動按鈕未讀數 ── */
+function updateFloatBadge() {
+  const badge = document.getElementById("floatBadge"); if (!badge) return;
+  const seat = APP_STATE.session ? String(APP_STATE.session.seat) : null;
+  if (!seat) { badge.classList.add("hidden"); return; }
+  const n = MSG_DATA.filter(m => String(m.seat) === seat && m.from === "teacher" && !m.readByParent).length;
+  if (n > 0) { badge.textContent = n; badge.classList.remove("hidden"); } else badge.classList.add("hidden");
+}
+
+/* ── 家長端：開啟與老師的對話視窗 ── */
+function openParentChat() {
+  if (!APP_STATE.session) { toast("請先以家長／學生身分登入", "warn"); return; }
+  showModal(`
+    <div class="flex flex-col max-h-[85vh]">
+      <div class="px-5 py-4 border-b flex items-center justify-between shrink-0">
+        <h3 class="font-bold">💬 聯絡老師</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button>
+      </div>
+      <div id="pChatBody" class="px-4 py-4 overflow-y-auto space-y-2 bg-slate-50" style="min-height:240px;max-height:55vh"></div>
+      <div class="p-3 border-t flex gap-2 shrink-0">
+        <input id="pChatInput" class="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="輸入訊息給老師…" />
+        <button id="pChatSend" class="btn3d b-indigo text-sm">送出</button>
+      </div>
+    </div>`, { size: "max-w-md" });
+  renderParentChatBody();
+  markTeacherMsgsRead();
+  document.getElementById("pChatSend").onclick = sendParentMsg;
+  document.getElementById("pChatInput").addEventListener("keydown", e => { if (e.key === "Enter") sendParentMsg(); });
+}
+function renderParentChatBody() {
+  const box = document.getElementById("pChatBody"); if (!box) return;
+  const seat = APP_STATE.session ? String(APP_STATE.session.seat) : null; if (!seat) return;
+  const msgs = MSG_DATA.filter(m => String(m.seat) === seat);
+  if (!msgs.length) { box.innerHTML = '<p class="text-center text-slate-400 text-sm py-6">尚無訊息，傳送第一則訊息給老師吧！</p>'; return; }
+  box.innerHTML = msgs.map(m => msgBubble(m, m.from === "parent")).join("");
+  box.scrollTop = box.scrollHeight;
+}
+async function sendParentMsg() {
+  const input = document.getElementById("pChatInput"); const text = input.value.trim(); if (!text) return;
+  const s = APP_STATE.session;
+  input.value = "";
+  try {
+    await db.collection("messages").add({ seat: s.seat, name: s.name || "", from: "parent", text, readByTeacher: false, readByParent: true, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    maybeEmailTeacher(s, text); // 視老師設定自動寄信通知
+  } catch (e) { toast("傳送失敗：" + e.message, "error"); input.value = text; }
+}
+async function markTeacherMsgsRead() {
+  const seat = APP_STATE.session ? String(APP_STATE.session.seat) : null; if (!seat) return;
+  const unread = MSG_DATA.filter(m => String(m.seat) === seat && m.from === "teacher" && !m.readByParent);
+  if (!unread.length) return;
+  try { const batch = db.batch(); unread.forEach(m => batch.update(db.collection("messages").doc(m.id), { readByParent: true })); await batch.commit(); } catch (e) {}
+}
+
+/* ── 自動寄 Email 給老師（FormSubmit 免費服務，免後端） ── */
+const MAIL_THROTTLE_MS = 10 * 60 * 1000; // 同一家長 10 分鐘內只寄一次通知信
+async function maybeEmailTeacher(session, text) {
+  const cfg = APP_STATE.config || {};
+  if (!cfg.autoEmail || !cfg.mailKey) return;
+
+  // 節流：第一則私訊寄信後，同座號家長 10 分鐘內的後續私訊不再寄
+  const seat = String(session.seat);
+  const ref = db.collection("mailThrottle").doc(seat);
+  try {
+    const snap = await ref.get();
+    const last = snap.exists ? Number(snap.data().lastAt || 0) : 0;
+    if (last && (Date.now() - last) < MAIL_THROTTLE_MS) return; // 仍在 10 分鐘冷卻內 → 不寄
+    await ref.set({ lastAt: Date.now(), seat }, { merge: true });   // 記錄本次寄信時間
+  } catch (e) { console.warn("通知節流讀寫失敗，仍嘗試寄信", e); }
+
+  try {
+    await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        access_key: cfg.mailKey,
+        from_name: "班級親師互動網",
+        subject: `【${cfg.className || "班級親師網"}】${session.seat}號 ${session.name || ""} 傳來私訊`,
+        座號: String(session.seat), 姓名: session.name || "（未提供）", 訊息內容: text,
+        備註: "為避免短時間內重複通知，同一位家長 10 分鐘內的後續訊息不會再寄信，請登入系統查看完整對話。"
+      })
+    });
+  } catch (e) { console.warn("自動寄信失敗", e); }
+}
+
+/* 用「已儲存」的設定寄測試信，走與家長私訊完全相同的通知路徑 */
+async function testSavedNotify() {
+  const cfg = APP_STATE.config || {};
+  if (!cfg.mailKey) { toast("尚未儲存 Access Key，請先填入並按「儲存設定」", "warn"); return; }
+  toast("以已儲存設定寄送測試中…", "info");
+  try {
+    const res = await fetch("https://api.web3forms.com/submit", {
+      method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ access_key: cfg.mailKey, from_name: "班級親師互動網", subject: `【${cfg.className || "班級親師網"}】通知測試（模擬家長私訊）`, 座號: "00", 姓名: "測試家長", 訊息內容: "這是一封模擬家長私訊的通知測試。若您收到，代表家長私訊通知已正常運作。" })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data && data.success === true) toast("已寄出，請至信箱（含垃圾郵件匣）查收", "success");
+    else toast("寄送失敗：" + ((data && data.message) || "請確認 Access Key 是否正確"), "error");
+  } catch (e) { toast("連線失敗：" + e.message, "error"); }
+}
+
+/* 老師主動發送測試信（Web3Forms），立即確認是否收得到 */
+async function testTeacherEmail() {
+  const key = (document.getElementById("setMailKey")?.value || "").trim();
+  if (!key) { toast("請先填入 Web3Forms Access Key", "warn"); return; }
+  toast("寄送測試信中…", "info");
+  let data = {};
+  try {
+    const res = await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ access_key: key, from_name: "班級親師互動網", subject: "【班級親師網】通知信測試", 訊息: "這是一封測試信。若您收到此信，表示家長私訊通知已可正常運作。" })
+    });
+    data = await res.json().catch(() => ({}));
+  } catch (e) {
+    showModal(`
+      <div class="p-6 space-y-3">
+        <h3 class="text-lg font-bold text-rose-600">✉️ 寄送失敗</h3>
+        <p class="text-sm text-slate-600">無法連線到寄信服務：${escapeHtml(e.message)}</p>
+        <p class="text-xs text-slate-400">請檢查網路連線；若在校園網路，外連寄信服務可能被阻擋，可改用手機網路或其他網路再試。</p>
+        <div class="text-right"><button onclick="closeModal()" class="btn3d b-blue text-sm">知道了</button></div>
+      </div>`, { size: "max-w-md" });
+    return;
+  }
+  const ok = data && data.success === true;
+  showModal(`
+    <div class="p-6 space-y-3">
+      <h3 class="text-lg font-bold">✉️ 通知信測試結果</h3>
+      ${ok ? `
+        <p class="text-sm text-emerald-700">✅ 已成功寄出測試信，請至您申請 Key 時所用的信箱查收。</p>
+        <p class="text-xs text-slate-500">若收件匣沒看到，請檢查「<b>垃圾郵件／促銷內容</b>」。看到此信即代表通知功能已可使用，記得勾選「自動寄通知信」並按「儲存設定」。</p>`
+      : `
+        <p class="text-sm text-rose-600">寄送未成功：${escapeHtml((data && data.message) || "請確認 Access Key 是否正確")}</p>
+        <ol class="text-sm list-decimal pl-5 space-y-1 text-slate-600">
+          <li>請至 <a href="https://web3forms.com" target="_blank" rel="noopener" class="underline text-blue-600">web3forms.com</a> 重新確認您的 <b>Access Key</b> 是否正確、完整。</li>
+          <li>確認申請 Key 時填的 Email 沒有打錯。</li>
+          <li>更正後再按一次「✉️ 測試」。</li>
+        </ol>`}
+      <div class="text-right"><button onclick="closeModal()" class="btn3d b-blue text-sm">知道了</button></div>
+    </div>`, { size: "max-w-md" });
+}
+
+/* ── 老師端：私訊清單（依座號分組） ── */
+function adminMessages(body) {
+  THREAD_RETURN = () => { openAdmin(); adminGoTab(7); };
+  const cfg = APP_STATE.config || {};
+  body.innerHTML = `
+    <div class="space-y-3">
+      <p class="text-xs text-slate-500">點選座號可查看完整對話並回覆。${cfg.autoEmail && cfg.mailKey ? "Email 自動通知：<b>已開啟</b>" : '（尚未開啟 Email 自動通知，可至「設定」分頁設定）'}</p>
+      <div id="admMsgArea"></div>
+    </div>`;
+  renderAdminMsgArea();
+}
+function renderAdminMsgArea() {
+  const area = document.getElementById("admMsgArea"); if (!area) return;
+  const bySeat = {};
+  MSG_DATA.forEach(m => { const k = String(m.seat); (bySeat[k] = bySeat[k] || []).push(m); });
+  const seats = Object.keys(bySeat).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (!seats.length) { area.innerHTML = '<p class="text-slate-400 text-sm py-6 text-center">目前沒有家長私訊。</p>'; return; }
+  area.innerHTML = `<div class="space-y-2">${seats.map(seat => {
+    const msgs = bySeat[seat].slice().sort((a, b) => (a.createdAt?.seconds || 9e9) - (b.createdAt?.seconds || 9e9));
+    const last = msgs[msgs.length - 1];
+    const unread = msgs.filter(m => m.from === "parent" && !m.readByTeacher).length;
+    const stu = APP_STATE.students.find(s => String(s.seat) === seat);
+    const nm = stu && !stu.hideName ? (stu.name || "") : "";
+    return `<button onclick="openAdminThread('${escapeHtml(seat)}')" class="w-full text-left border rounded-xl p-3 hover:bg-slate-50 flex items-center justify-between gap-2">
+      <div class="min-w-0"><div class="font-medium text-sm">${escapeHtml(seat)}號 ${escapeHtml(nm)}</div><div class="text-xs text-slate-400 truncate">${last.from === "teacher" ? "我：" : ""}${escapeHtml(last.text || "")}</div></div>
+      ${unread ? `<span class="bg-rose-500 text-white text-xs font-bold rounded-full px-2 py-0.5 shrink-0">${unread}</span>` : ""}
+    </button>`;
+  }).join("")}</div>`;
+}
+
+/* ── 老師端：開啟某座號對話並回覆 ── */
+function openAdminThread(seat) {
+  THREAD_SEAT = String(seat);
+  const stu = APP_STATE.students.find(s => String(s.seat) === THREAD_SEAT);
+  const nm = stu && !stu.hideName ? (stu.name || "") : "";
+  showModal(`
+    <div class="flex flex-col max-h-[85vh]">
+      <div class="px-5 py-4 border-b flex items-center justify-between shrink-0">
+        <h3 class="font-bold">💬 ${escapeHtml(seat)}號 ${escapeHtml(nm)}</h3>
+        <div class="flex items-center gap-2">
+          <button onclick="exportThreadHtml('${escapeHtml(String(seat))}')" class="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200">⬇ 匯出HTML</button>
+          <button onclick="threadBack()" class="text-slate-400 hover:text-slate-600 text-xl">×</button>
+        </div>
+      </div>
+      <div id="admThreadBody" class="px-4 py-4 overflow-y-auto space-y-2 bg-slate-50" style="min-height:240px;max-height:55vh"></div>
+      <div class="p-3 border-t flex gap-2 shrink-0">
+        <input id="admReplyInput" class="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="回覆家長…" />
+        <button id="admReplySend" class="btn3d b-indigo text-sm">回覆</button>
+      </div>
+    </div>`, { size: "max-w-md", noBackdropClose: true });
+  renderAdminThreadBody();
+  markParentMsgsRead(THREAD_SEAT);
+  document.getElementById("admReplySend").onclick = sendAdminReply;
+  document.getElementById("admReplyInput").addEventListener("keydown", e => { if (e.key === "Enter") sendAdminReply(); });
+}
+function renderAdminThreadBody() {
+  const box = document.getElementById("admThreadBody"); if (!box || !THREAD_SEAT) return;
+  const msgs = MSG_DATA.filter(m => String(m.seat) === THREAD_SEAT).slice().sort((a, b) => (a.createdAt?.seconds || 9e9) - (b.createdAt?.seconds || 9e9));
+  box.innerHTML = msgs.length ? msgs.map(m => msgBubble(m, m.from === "teacher", { recall: m.from === "teacher" })).join("") : '<p class="text-center text-slate-400 text-sm py-6">尚無訊息。</p>';
+  box.scrollTop = box.scrollHeight;
+}
+async function sendAdminReply() {
+  const input = document.getElementById("admReplyInput"); const text = input.value.trim(); if (!text) return;
+  input.value = "";
+  try { await db.collection("messages").add({ seat: THREAD_SEAT, from: "teacher", text, readByTeacher: true, readByParent: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); }
+  catch (e) { toast("回覆失敗：" + e.message, "error"); input.value = text; }
+}
+async function markParentMsgsRead(seat) {
+  const unread = MSG_DATA.filter(m => String(m.seat) === String(seat) && m.from === "parent" && !m.readByTeacher);
+  if (!unread.length) return;
+  try { const batch = db.batch(); unread.forEach(m => batch.update(db.collection("messages").doc(m.id), { readByTeacher: true })); await batch.commit(); } catch (e) {}
+}
+
+/* 關閉對話串時的返回行為 */
+function threadBack() { if (typeof THREAD_RETURN === "function") THREAD_RETURN(); else closeModal(); }
+
+/* 老師收回（永久移除）訊息；刪除後家長端與老師端皆不再顯示，且無任何收回提示 */
+async function recallMsg(id) {
+  if (!APP_STATE.isTeacher) return;
+  if (!await confirmDialog("收回訊息", "收回後此訊息將永久移除，家長端也不會看到任何痕跡。確定收回？", { okText: "收回", danger: true })) return;
+  try { await db.collection("messages").doc(id).delete(); toast("訊息已收回", "info"); }
+  catch (e) { toast("收回失敗：" + e.message, "error"); }
+}
+
+/* 老師匯出某座號家長的完整私訊紀錄為 HTML（含發訊時間） */
+function exportThreadHtml(seat) {
+  const msgs = MSG_DATA.filter(m => String(m.seat) === String(seat)).slice().sort((a, b) => (a.createdAt?.seconds || 9e9) - (b.createdAt?.seconds || 9e9));
+  if (!msgs.length) { toast("此座號沒有訊息可匯出", "warn"); return; }
+  const stu = APP_STATE.students.find(s => String(s.seat) === String(seat));
+  const nm = stu ? (stu.name || "") : "";
+  const cls = APP_STATE.config?.className || "班級親師網";
+  const rows = msgs.map(m => {
+    const t = m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString("zh-TW") : "";
+    const who = m.from === "teacher" ? "老師" : `${escapeHtml(String(seat))}號家長`;
+    const side = m.from === "teacher" ? "teacher" : "parent";
+    return `<div class="row ${side}"><div class="bubble"><div class="meta">${who}　${escapeHtml(t)}</div><div class="text">${escapeHtml(m.text || "").replace(/\n/g, "<br>")}</div></div></div>`;
+  }).join("\n");
+  const html = `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(cls)}－${escapeHtml(String(seat))}號私訊紀錄</title>
+<style>
+  body{font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;background:#f1f5f9;color:#334155;margin:0;padding:24px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#64748b;font-size:13px;margin-bottom:20px}
+  .row{display:flex;margin:12px 0}
+  .row.teacher{justify-content:flex-end}
+  .bubble{max-width:75%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.55;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .parent .bubble{background:#fff;border:1px solid #e2e8f0}
+  .teacher .bubble{background:#6366f1;color:#fff}
+  .meta{font-size:11px;opacity:.75;margin-bottom:3px}
+  .text{white-space:normal;word-break:break-word}
+  footer{text-align:center;color:#94a3b8;font-size:11px;margin-top:24px}
+</style></head><body><div class="wrap">
+  <h1>📨 ${escapeHtml(cls)}　私訊紀錄</h1>
+  <div class="sub">座號 ${escapeHtml(String(seat))}　${escapeHtml(nm)}　・　共 ${msgs.length} 則　・　匯出時間：${new Date().toLocaleString("zh-TW")}</div>
+  ${rows}
+  <footer>本紀錄由班級親師互動網匯出</footer>
+</div></body></html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `私訊紀錄_${seat}號${nm ? "_" + nm : ""}.html`;
+  a.click();
+  toast("HTML 紀錄已下載", "success");
+}
+
+/* ── 老師端：浮動「家長私訊」收件匣 ── */
+function openTeacherInbox() {
+  if (!APP_STATE.isTeacher) { toast("請先以老師身分登入", "warn"); return; }
+  THREAD_RETURN = openTeacherInbox; // 對話串關閉後回到此收件匣
+  showModal(`
+    <div class="flex flex-col max-h-[85vh]">
+      <div class="px-5 py-4 border-b flex items-center justify-between shrink-0">
+        <h3 class="font-bold">📨 家長私訊</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">×</button>
+      </div>
+      <div class="px-4 py-4 overflow-y-auto" style="max-height:72vh">
+        <p class="text-xs text-slate-500 mb-3">點選座號可查看完整對話並回覆。<span class="text-rose-500">紅＝未讀</span>，<span class="text-amber-600">琥珀＝等待您回覆</span>。</p>
+        <div id="admMsgArea"></div>
+      </div>
+    </div>`, { size: "max-w-md" });
+  renderAdminMsgArea();
+}
+
+/* ── 老師端：浮動按鈕未讀／未回覆數 ── */
+function updateTeacherFloat() {
+  const btn = document.getElementById("floatTeacher"); if (!btn) return;
+  if (!APP_STATE.isTeacher) { btn.classList.add("hidden"); return; }
+  btn.classList.remove("hidden");
+  // 未讀家長私訊（家長傳來且老師尚未讀）
+  const unread = MSG_DATA.filter(m => m.from === "parent" && !m.readByTeacher).length;
+  // 未回覆：每個座號的最後一則訊息為家長者（仍等待老師回覆）
+  const bySeat = {};
+  MSG_DATA.forEach(m => { const k = String(m.seat); (bySeat[k] = bySeat[k] || []).push(m); });
+  let unreplied = 0;
+  Object.values(bySeat).forEach(arr => { arr.sort((a, b) => (a.createdAt?.seconds || 9e9) - (b.createdAt?.seconds || 9e9)); if (arr.length && arr[arr.length - 1].from === "parent") unreplied++; });
+  const ub = document.getElementById("ftUnread"), rb = document.getElementById("ftUnreplied");
+  if (unread > 0) { ub.textContent = unread; ub.classList.remove("hidden"); } else ub.classList.add("hidden");
+  if (unreplied > 0) { rb.textContent = unreplied; rb.classList.remove("hidden"); } else rb.classList.add("hidden");
+  btn.title = `家長私訊　未讀 ${unread}　未回覆 ${unreplied}`;
+}
+</script>
+</body>
+</html>
