@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>班級親師互動網</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Noto Sans TC 字體 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<!-- Firebase v8 (Compat) SDK，使用 CDN 載入，方便單檔部署 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<!-- JSZip：回條圖片打包下載 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+  * { font-family: 'Noto Sans TC', system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+
+  /* ── 華麗淡色系漸層背景 ── */
+  body {
+    background: linear-gradient(135deg, #eef2ff 0%, #fae8ff 35%, #e0f2fe 70%, #ecfdf5 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: #334155;
+  }
+
+  /* ════════ 3D 卡片：各功能區塊不同淡色系 ════════ */
+  .card-3d {
+    position: relative;
+    border-radius: 26px;
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--c2, #fff), var(--c1, #f1f5f9));
+    border: 1px solid rgba(255,255,255,.75);
+    box-shadow:
+      0 18px 40px -16px var(--shadow, rgba(0,0,0,.18)),
+      0 6px 12px -6px rgba(0,0,0,.06),
+      inset 0 2px 0 rgba(255,255,255,.95),
+      inset 0 -3px 8px rgba(0,0,0,.03);
+    transition: transform .35s cubic-bezier(.2,.8,.3,1), box-shadow .35s;
+  }
+  .card-3d:hover {
+    transform: translateY(-5px) scale(1.005);
+    box-shadow:
+      0 28px 55px -18px var(--shadow, rgba(0,0,0,.22)),
+      0 12px 22px -8px rgba(0,0,0,.08),
+      inset 0 2px 0 rgba(255,255,255,.95),
+      inset 0 -3px 8px rgba(0,0,0,.03);
+  }
+  /* 卡片頂部彩色光條 */
+  .card-3d::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .card-head {
+    display: flex; align-items: center; gap: .8rem;
+    padding: 1.05rem 1.3rem .9rem;
+    border-bottom: 1px solid rgba(255,255,255,.7);
+  }
+  .head-icon {
+    width: 46px; height: 46px; border-radius: 16px;
+    display: grid; place-items: center; font-size: 23px; flex-shrink: 0;
+    background: linear-gradient(145deg, #ffffff, var(--c1));
+    box-shadow:
+      0 8px 14px -5px var(--shadow),
+      inset 0 -3px 5px rgba(0,0,0,.06),
+      inset 0 2px 3px rgba(255,255,255,.95);
+  }
+  .card-title { font-weight: 800; font-size: 1.06rem; color: var(--accent); letter-spacing: .5px; }
+  .card-body { padding: 1.25rem; }
+  .locked-msg { text-align: center; color: #94a3b8; padding: 2rem 0; font-size: .875rem; }
+
+  /* 各功能區塊配色 */
+  .theme-sky     { --c1:#dbeafe; --c2:#f5faff; --accent:#0369a1; --accent2:#38bdf8; --shadow:rgba(56,189,248,.32); }
+  .theme-violet  { --c1:#ede9fe; --c2:#faf8ff; --accent:#6d28d9; --accent2:#a78bfa; --shadow:rgba(167,139,250,.32); }
+  .theme-rose    { --c1:#ffe4e6; --c2:#fff5f6; --accent:#be123c; --accent2:#fb7185; --shadow:rgba(251,113,133,.32); }
+  .theme-emerald { --c1:#d1fae5; --c2:#f3fdf8; --accent:#047857; --accent2:#34d399; --shadow:rgba(52,211,153,.32); }
+  .theme-amber   { --c1:#fef3c7; --c2:#fffdf3; --accent:#b45309; --accent2:#fbbf24; --shadow:rgba(251,191,36,.34); }
+
+  /* ════════ 3D 按鈕 ════════ */
+  .btn3d {
+    border: none; cursor: pointer; color: #fff; font-weight: 700;
+    border-radius: 15px; padding: .65rem 1.15rem; position: relative;
+    transition: transform .1s ease, box-shadow .1s ease, filter .15s;
+  }
+  .btn3d:hover { filter: brightness(1.05); }
+  .btn3d:active { transform: translateY(4px); }
+  .b-blue    { background: linear-gradient(180deg,#60a5fa,#3b82f6); box-shadow: 0 5px 0 #1d4ed8, 0 9px 16px -3px rgba(37,99,235,.45); }
+  .b-blue:active    { box-shadow: 0 1px 0 #1d4ed8, 0 3px 8px -3px rgba(37,99,235,.45); }
+  .b-amber   { background: linear-gradient(180deg,#fbbf24,#f59e0b); box-shadow: 0 5px 0 #b45309, 0 9px 16px -3px rgba(245,158,11,.45); }
+  .b-amber:active   { box-shadow: 0 1px 0 #b45309; }
+  .b-emerald { background: linear-gradient(180deg,#34d399,#10b981); box-shadow: 0 5px 0 #047857, 0 9px 16px -3px rgba(16,185,129,.45); }
+  .b-emerald:active { box-shadow: 0 1px 0 #047857; }
+  .b-rose    { background: linear-gradient(180deg,#fb7185,#f43f5e); box-shadow: 0 5px 0 #be123c, 0 9px 16px -3px rgba(244,63,94,.45); }
+  .b-rose:active    { box-shadow: 0 1px 0 #be123c; }
+  .b-slate   { background: linear-gradient(180deg,#475569,#334155); box-shadow: 0 5px 0 #1e293b, 0 9px 16px -3px rgba(51,65,85,.4); }
+  .b-slate:active   { box-shadow: 0 1px 0 #1e293b; }
+  .b-indigo  { background: linear-gradient(180deg,#818cf8,#6366f1); box-shadow: 0 5px 0 #4338ca, 0 9px 16px -3px rgba(99,102,241,.45); }
+  .b-indigo:active  { box-shadow: 0 1px 0 #4338ca; }
+
+  /* 玻璃擬態頂欄 */
+  .glass-nav {
+    background: rgba(255,255,255,.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 4px 20px -8px rgba(0,0,0,.12);
+    border-bottom: 1px solid rgba(255,255,255,.6);
+  }
+  .brand-pill {
+    background: linear-gradient(145deg,#818cf8,#6366f1);
+    box-shadow: 0 6px 12px -3px rgba(99,102,241,.5), inset 0 2px 2px rgba(255,255,255,.4);
+  }
+
+  /* 模態視窗動畫 */
+  .modal-backdrop { animation: fadeIn .18s ease; }
+  .modal-card { animation: popIn .25s cubic-bezier(.2,.9,.3,1.3); }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes popIn { from { opacity: 0; transform: translateY(20px) scale(.94) } to { opacity: 1; transform: none } }
+  .toast-item { animation: toastIn .25s ease, toastOut .3s ease forwards; animation-delay: 0s, 2.7s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-14px) } to { opacity: 1; transform: none } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(-14px) } }
+
+  /* 富文本內容樣式 */
+  .rich-content a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  .rich-content ul { list-style: disc; padding-left: 1.25rem; }
+  .rich-content ol { list-style: decimal; padding-left: 1.25rem; }
+  .rich-content b, .rich-content strong { font-weight: 700; }
+
+  /* ════════ 聯絡簿美化呈現 ════════ */
+  .cb-head { font-weight: 800; color: #0369a1; font-size: .98rem; margin: .7rem 0 .4rem; display: flex; align-items: center; gap: .4rem; }
+  .cb-head::before { content: "📌"; font-size: .9em; }
+  .cb-head:first-child { margin-top: 0; }
+  .cb-item {
+    display: flex; align-items: flex-start; gap: .7rem;
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #bae6fd; border-radius: 14px;
+    padding: .7rem .9rem; margin: .5rem 0;
+    box-shadow: 0 3px 8px -4px rgba(56,189,248,.45), inset 0 1px 0 rgba(255,255,255,.8);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .cb-item:hover { transform: translateX(4px); box-shadow: 0 6px 14px -5px rgba(56,189,248,.55); }
+  .cb-num {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(145deg, #38bdf8, #0284c7); color: #fff;
+    font-weight: 800; font-size: .82rem; display: grid; place-items: center;
+    box-shadow: 0 2px 5px rgba(2,132,199,.45), inset 0 1px 1px rgba(255,255,255,.5);
+  }
+  .cb-text { font-size: .97rem; line-height: 1.55; padding-top: 2px; }
+  .cb-text a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  .cb-para { font-size: .92rem; line-height: 1.65; color: #475569; margin: .35rem 0; }
+  .cb-para a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+  /* 聯絡簿主畫面左右二欄 */
+  .cb-cols { column-count: 2; column-gap: .8rem; }
+  .cb-cols .cb-item, .cb-cols .cb-head, .cb-cols .cb-para { break-inside: avoid; -webkit-column-break-inside: avoid; }
+  .cb-cols .cb-item { margin-top: 0; }
+  @media (max-width: 480px) { .cb-cols { column-gap: .5rem; } }
+  /* 全螢幕放大版（方便抄寫）；尺寸以 em 為單位，可由 A-/A+ 調整容器基準字級 */
+  .cb-big { font-size: 36px; }
+  .cb-big .cb-item { padding: .55em .75em; margin: .45em 0; border-radius: .55em; gap: .6em; }
+  .cb-big .cb-num { width: 1.5em; height: 1.5em; font-size: .9em; }
+  .cb-big .cb-text { font-size: 1em; line-height: 1.55; }
+  .cb-big .cb-head { font-size: 1em; margin: .7em 0 .35em; }
+  .cb-big .cb-para { font-size: .9em; line-height: 1.65; }
+
+  /* ════════ 資源充電站卡片 ════════ */
+  .res-card {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    min-height: 56px; padding: .6rem .7rem; border-radius: 14px; font-weight: 700; font-size: .92rem;
+    color: #065f46; background: linear-gradient(145deg, #ecfdf5, #a7f3d0);
+    border: 1px solid rgba(255,255,255,.7); line-height: 1.3; word-break: break-word;
+    box-shadow: 0 4px 10px -4px rgba(16,185,129,.45), inset 0 1px 0 rgba(255,255,255,.85);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .res-card:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 9px 18px -5px rgba(16,185,129,.55); }
+  /* ════════ 小考成績卡片 ════════ */
+  .quiz-score { background: linear-gradient(145deg, #fffbeb, #fde68a); border: 1px solid rgba(255,255,255,.7); border-radius: 14px; padding: .75rem; text-align: center; box-shadow: 0 3px 8px -4px rgba(251,191,36,.5), inset 0 1px 0 rgba(255,255,255,.85); }
+  .qs-sub { font-size: .8rem; color: #92400e; font-weight: 700; margin-bottom: .25rem; }
+  .qs-val { font-size: 1.6rem; font-weight: 900; color: #b45309; line-height: 1; }
+
+  /* ════════ 作業檢核表格 ════════ */
+  .hw-table { border-collapse: separate; border-spacing: 5px; }
+  .hw-th-seat, .hw-td-seat {
+    position: sticky; left: 0; z-index: 1;
+    background: rgba(255,255,255,.92); white-space: nowrap;
+    text-align: left; padding: 5px 10px; font-weight: 600; border-radius: 9px;
+    box-shadow: 2px 0 6px -3px rgba(0,0,0,.12);
+  }
+  .hw-th {
+    padding: 5px 10px; font-weight: 600; white-space: nowrap;
+    background: rgba(255,255,255,.7); border-radius: 9px; max-width: 130px; color: #475569;
+  }
+  .hw-row-me .hw-td-seat { background: #fde68a; color: #92400e; }
+  .hw-cell {
+    display: inline-block; border-radius: 9px; padding: 5px 8px; font-size: 11px;
+    font-weight: 700; text-align: center; min-width: 56px; transition: all .15s;
+    box-shadow: inset 0 -2px 3px rgba(0,0,0,.06), inset 0 1px 1px rgba(255,255,255,.7);
+  }
+  .hw-clickable { cursor: pointer; }
+  .hw-clickable:hover { transform: scale(1.08); box-shadow: 0 3px 8px rgba(0,0,0,.18); }
+  /* 批次點擊：欄標題(作業名稱) / 座號姓名 */
+  .hw-clickable-head { cursor: pointer; user-select: none; transition: background .15s, color .15s; }
+  .hw-clickable-head:hover { background: #6366f1; color: #fff; }
+  .hw-0 { background: #e2e8f0; color: #94a3b8; }
+  .hw-1 { background: #bbf7d0; color: #15803d; }
+  .hw-2 { background: #fde68a; color: #b45309; }
+  .hw-3 { background: #bfdbfe; color: #1d4ed8; }
+  .hw-legend span { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; }
+  .hw-dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  /* ════════ 課堂加扣分模組 ════════ */
+  .pt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: .6rem; }
+  .pt-card {
+    border: 1px solid rgba(255,255,255,.7); border-radius: 16px; padding: .65rem .4rem;
+    display: flex; flex-direction: column; align-items: center; gap: .15rem; cursor: pointer;
+    box-shadow: 0 4px 10px -5px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.85);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .pt-card:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 18px -6px rgba(0,0,0,.25); }
+  .pt-card:active { transform: scale(.97); }
+  .pt-pos  { background: linear-gradient(150deg,#ecfdf5,#a7f3d0); }
+  .pt-neg  { background: linear-gradient(150deg,#fff1f2,#fecdd3); }
+  .pt-zero { background: linear-gradient(150deg,#f8fafc,#e2e8f0); }
+  .pt-seat { font-size: .68rem; color: #64748b; font-weight: 700; }
+  .pt-name { font-size: .82rem; font-weight: 700; color: #334155; line-height: 1.1; text-align: center; word-break: break-all; }
+  .pt-val  { font-size: 1.45rem; font-weight: 900; color: #b45309; line-height: 1; margin-top: .1rem; }
+  .pt-pos .pt-val { color: #047857; }
+  .pt-neg .pt-val { color: #be123c; }
+  .pt-zero .pt-val { color: #94a3b8; }
+
+  .pt-beh { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    border-radius: 12px; padding: .55rem .75rem; font-weight: 700; font-size: .9rem; color: #fff; cursor: pointer;
+    box-shadow: 0 3px 7px -3px rgba(0,0,0,.3); transition: transform .12s; border: none; }
+  .pt-beh:hover { transform: scale(1.02); filter: brightness(1.04); }
+  .pt-beh:active { transform: scale(.97); }
+  .pt-beh-pos { background: linear-gradient(135deg,#34d399,#10b981); }
+  .pt-beh-neg { background: linear-gradient(135deg,#fb7185,#f43f5e); }
+  .pt-beh-pt  { background: rgba(0,0,0,.18); border-radius: 8px; padding: 0 .45rem; font-size: 1rem; }
+
+  .pt-myhead { display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(135deg,#fffbeb,#fde68a); border: 1px solid rgba(255,255,255,.7);
+    border-radius: 14px; padding: .7rem 1rem; margin-bottom: .75rem; font-weight: 700; color: #92400e; }
+  .pt-myhead b { font-size: 1.5rem; font-weight: 900; }
+  .pt-board { display: flex; flex-direction: column; gap: .4rem; }
+  .pt-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .75rem; border-radius: 12px;
+    background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.7); }
+  .pt-row-me { background: linear-gradient(135deg,#fef9c3,#fde68a); border-color: #fcd34d; box-shadow: 0 3px 8px -4px rgba(251,191,36,.5); }
+  .pt-rank { width: 34px; text-align: center; font-weight: 800; color: #475569; flex-shrink: 0; }
+  .pt-who  { flex: 1; font-size: .92rem; color: #334155; font-weight: 600; }
+  .pt-me-tag { font-size: .65rem; background: #f59e0b; color: #fff; border-radius: 6px; padding: .05rem .35rem; margin-left: .3rem; }
+  .pt-row-val { font-size: 1.05rem; font-weight: 900; flex-shrink: 0; }
+
+  /* 全螢幕加扣分卡牆 */
+  .pt-fs { height: 88vh; }
+  .pt-grid-big { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .9rem; }
+  .pt-card-big { padding: 1.1rem .6rem; border-radius: 22px; }
+  .pt-card-big .pt-seat { font-size: .82rem; }
+  .pt-card-big .pt-name { font-size: 1.05rem; }
+  .pt-card-big .pt-val  { font-size: 2.4rem; margin-top: .3rem; }
+  /* 小組加扣分視窗的組員名單卡（純展示、不可點擊） */
+  .pt-grid-members { grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: .5rem; }
+  .pt-grid-members .pt-card { cursor: default; padding: .5rem .35rem; }
+  .pt-grid-members .pt-card:hover { transform: none; box-shadow: 0 4px 10px -5px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.85); }
+  .pt-grid-members .pt-name { font-size: .78rem; }
+  .pt-grid-members .pt-val { font-size: 1.2rem; }
+  /* 小組挑選圖卡（含組員姓名） */
+  .pt-grp-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+  .pt-grp-card {
+    text-align: left; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; padding: .85rem 1rem;
+    background: linear-gradient(150deg,#ede9fe,#faf8ff); cursor: pointer;
+    box-shadow: 0 5px 12px -6px rgba(124,58,237,.3), inset 0 1px 0 rgba(255,255,255,.85);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .pt-grp-card:hover { transform: translateY(-3px); box-shadow: 0 12px 22px -8px rgba(124,58,237,.4); }
+  .pt-grp-card:active { transform: scale(.98); }
+  .pt-grp-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+  .pt-grp-card-name { font-weight: 800; color: #6d28d9; font-size: 1rem; }
+  .pt-grp-card-count { font-size: .7rem; font-weight: 700; color: #7c3aed; background: rgba(124,58,237,.12); border-radius: 8px; padding: .1rem .5rem; }
+  .pt-grp-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .pt-grp-chip { font-size: .78rem; color: #4c1d95; background: rgba(255,255,255,.75); border: 1px solid rgba(167,139,250,.4); border-radius: 999px; padding: .12rem .55rem; }
+
+  /* ════════ 課堂小工具模組 ════════ */
+
+  /* 共用按鈕 */
+  .tools-card-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .5rem; border-radius: 22px; padding: 1.1rem .8rem; cursor: pointer;
+    border: 1.5px solid rgba(255,255,255,.75); transition: transform .18s, box-shadow .18s;
+    box-shadow: 0 6px 16px -6px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.9);
+    user-select: none; flex: 1;
+  }
+  .tools-card-btn:hover { transform: translateY(-4px) scale(1.03); }
+  .tools-card-btn:active { transform: scale(.97); }
+  .tools-card-btn .tc-icon { font-size: 2.2rem; line-height: 1; }
+  .tools-card-btn .tc-label { font-weight: 800; font-size: .92rem; color: #1e1b4b; }
+  .tools-card-btn .tc-sub { font-size: .72rem; color: #6d28d9; font-weight: 600; }
+  .tools-btn-picker { background: linear-gradient(145deg, #ede9fe, #ddd6fe); }
+  .tools-btn-timer  { background: linear-gradient(145deg, #e0f2fe, #bae6fd); }
+
+  /* ── 抽人 ── */
+  .tools-pick-result {
+    min-height: 130px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #faf5ff, #ede9fe);
+    border: 2px dashed #c4b5fd; transition: all .2s;
+  }
+  .tools-pick-placeholder { color: #a78bfa; font-size: .95rem; font-weight: 600; }
+  .tools-pick-spinning {
+    display: flex; flex-direction: column; align-items: center; gap: .25rem;
+    animation: pickSpin .12s ease-in-out infinite alternate;
+  }
+  @keyframes pickSpin { from { transform: scale(.96) } to { transform: scale(1.04) } }
+  .tools-pick-seat { font-size: 1rem; font-weight: 800; color: #7c3aed; }
+  .tools-pick-name { font-size: 1.6rem; font-weight: 900; color: #4c1d95; }
+  .tools-pick-winner {
+    display: flex; flex-direction: column; align-items: center; gap: .3rem;
+    animation: winnerPop .4s cubic-bezier(.2,.9,.3,1.4) both;
+  }
+  @keyframes winnerPop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .tools-pick-burst { font-size: 2.2rem; animation: burst .5s ease both; }
+  @keyframes burst { 0%{transform:scale(0) rotate(-30deg)} 60%{transform:scale(1.3) rotate(10deg)} 100%{transform:scale(1) rotate(0)} }
+  .tools-pick-seat-big { font-size: 1.1rem; font-weight: 900; color: #7c3aed; }
+  .tools-pick-name-big { font-size: 2.4rem; font-weight: 900; color: #4c1d95; line-height: 1.1; }
+  .tools-btn-spin {
+    background: linear-gradient(180deg,#a78bfa,#7c3aed);
+    box-shadow: 0 5px 0 #5b21b6, 0 10px 20px -5px rgba(124,58,237,.5);
+    border: none; border-radius: 18px; color: #fff; font-weight: 800;
+    font-size: 1rem; padding: .75rem 2.5rem; cursor: pointer; transition: transform .1s;
+  }
+  .tools-btn-spin:hover { filter: brightness(1.07); }
+  .tools-btn-spin:active { transform: translateY(4px); box-shadow: 0 1px 0 #5b21b6; }
+  .tools-btn-spin:disabled { opacity: .55; cursor: not-allowed; }
+  .tools-picked-list {
+    background: rgba(237,233,254,.5); border-radius: 14px;
+    border: 1px solid #ddd6fe; padding: .75rem 1rem;
+  }
+  .tools-picked-chip {
+    background: linear-gradient(135deg,#ede9fe,#ddd6fe);
+    border: 1px solid #c4b5fd; border-radius: 999px;
+    padding: .2rem .7rem; font-size: .8rem; font-weight: 700; color: #5b21b6;
+  }
+
+  /* ── 計時器（視窗內） ── */
+  .tools-timer-display {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    border-radius: 22px; padding: 1.5rem 1rem 1rem;
+    text-align: center; transition: background .4s;
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .tools-timer-display.tools-timer-urgent {
+    background: linear-gradient(135deg, #450a0a, #7f1d1d);
+    animation: urgentPulse 1s ease-in-out infinite;
+  }
+  .tools-timer-display.tools-timer-done { background: linear-gradient(135deg, #14532d, #166534); }
+  .tools-timer-display.tools-timer-flash { filter: brightness(2); }
+  @keyframes urgentPulse { 0%,100%{box-shadow:0 8px 24px -8px rgba(239,68,68,.4)} 50%{box-shadow:0 8px 36px -4px rgba(239,68,68,.8)} }
+  .tools-timer-digits {
+    font-size: 3.8rem; font-weight: 900; letter-spacing: .04em;
+    color: #f8fafc; line-height: 1; font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 30px rgba(99,102,241,.6);
+    transition: color .3s;
+  }
+  .tools-timer-urgent .tools-timer-digits { color: #fca5a5; text-shadow: 0 0 30px rgba(239,68,68,.7); }
+  .tools-timer-done .tools-timer-digits { font-size: 1.6rem; color: #86efac; }
+  .tools-timer-bar { height: 6px; background: rgba(255,255,255,.12); border-radius: 999px; margin-top: 1rem; overflow: hidden; }
+  .tools-timer-bar-fill { height: 100%; border-radius: 999px; transition: width .25s linear, background .4s; }
+  .tools-preset-btn {
+    background: linear-gradient(145deg, #e0f2fe, #bae6fd);
+    border: 1px solid #7dd3fc; border-radius: 12px;
+    padding: .4rem .85rem; font-size: .8rem; font-weight: 700;
+    color: #0369a1; cursor: pointer; transition: transform .1s, box-shadow .1s;
+    box-shadow: 0 3px 6px -3px rgba(56,189,248,.4);
+  }
+  .tools-preset-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px -4px rgba(56,189,248,.5); }
+  .tools-btn-timer-start {
+    flex: 1; background: linear-gradient(180deg,#6366f1,#4338ca);
+    box-shadow: 0 5px 0 #312e81, 0 10px 20px -5px rgba(99,102,241,.5);
+    border: none; border-radius: 16px; color: #fff; font-weight: 800;
+    font-size: .95rem; padding: .7rem 1.5rem; cursor: pointer; transition: transform .1s;
+  }
+  .tools-btn-timer-start:hover { filter: brightness(1.07); }
+  .tools-btn-timer-start:active { transform: translateY(3px); box-shadow: 0 1px 0 #312e81; }
+  .tools-btn-timer-pause {
+    flex: 1; background: linear-gradient(180deg,#fbbf24,#f59e0b);
+    box-shadow: 0 5px 0 #b45309, 0 10px 20px -5px rgba(245,158,11,.5);
+    border: none; border-radius: 16px; color: #fff; font-weight: 800;
+    font-size: .95rem; padding: .7rem 1.5rem; cursor: pointer; transition: transform .1s;
+  }
+  .tools-btn-timer-reset {
+    background: linear-gradient(145deg, #f1f5f9, #e2e8f0);
+    border: 1px solid #cbd5e1; border-radius: 16px; color: #475569;
+    font-weight: 700; font-size: .95rem; padding: .7rem 1.2rem; cursor: pointer;
+    box-shadow: 0 3px 6px -3px rgba(0,0,0,.12); transition: transform .1s;
+  }
+  .tools-btn-timer-reset:hover { background: #e2e8f0; }
+
+  /* ── 全螢幕計時器 ── */
+  .tools-timer-fs {
+    position: fixed; inset: 0; z-index: 200;
+    background: linear-gradient(135deg, #0f172a, #1e1b4b);
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn .2s ease;
+  }
+  .tools-timer-fs-display {
+    text-align: center; padding: 2rem; width: 100%; max-width: 600px;
+    transition: background .4s;
+  }
+  .tools-timer-fs-display.tools-timer-urgent { animation: urgentPulse 1s ease-in-out infinite; }
+  .tools-timer-fs-display.tools-timer-done .tools-timer-fs-digits { color: #86efac !important; font-size: 8vw !important; }
+  .tools-timer-fs-digits {
+    font-size: min(22vw, 18rem); font-weight: 900; color: #f8fafc;
+    line-height: .95; letter-spacing: .02em; font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 60px rgba(129,140,248,.5);
+    transition: color .3s, font-size .2s;
+  }
+  .tools-timer-fs-display.tools-timer-urgent .tools-timer-fs-digits {
+    color: #fca5a5; text-shadow: 0 0 60px rgba(239,68,68,.7);
+  }
+  #timerFsBar {
+    height: 8px; background: rgba(255,255,255,.1); border-radius: 999px;
+    margin: 1.5rem auto; max-width: 500px; overflow: hidden;
+  }
+  .tools-timer-fs-bar-fill { height: 100%; border-radius: 999px; transition: width .25s linear, background .4s; }
+  .tools-timer-fs-btns { display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem; flex-wrap: wrap; }
+  .tools-btn-fs-start {
+    background: linear-gradient(180deg,#818cf8,#6366f1);
+    box-shadow: 0 6px 0 #4338ca; border: none; border-radius: 20px;
+    color: #fff; font-weight: 800; font-size: 1.4rem; padding: .9rem 3rem;
+    cursor: pointer; transition: transform .1s;
+  }
+  .tools-btn-fs-start:active { transform: translateY(5px); box-shadow: 0 1px 0 #4338ca; }
+  .tools-btn-fs-reset {
+    background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.25);
+    border-radius: 20px; color: #e2e8f0; font-weight: 700; font-size: 1.4rem;
+    padding: .9rem 1.8rem; cursor: pointer; transition: background .15s;
+  }
+  .tools-btn-fs-reset:hover { background: rgba(255,255,255,.22); }
+  .tools-btn-fs-close {
+    background: rgba(239,68,68,.25); border: 1.5px solid rgba(239,68,68,.4);
+    border-radius: 20px; color: #fca5a5; font-weight: 700; font-size: 1rem;
+    padding: .9rem 1.5rem; cursor: pointer; transition: background .15s;
+  }
+  .tools-btn-fs-close:hover { background: rgba(239,68,68,.4); }
+
+  /* ════════ 座位表模組 ════════ */
+  .seat-classroom {
+    background: linear-gradient(160deg, #f0fdf4, #dcfce7);
+    border: 1px solid #bbf7d0;
+    border-radius: 18px;
+    padding: 1rem;
+    overflow: hidden;
+  }
+  .seat-board {
+    background: linear-gradient(135deg, #166534, #15803d);
+    color: #fff;
+    text-align: center;
+    font-weight: 800;
+    font-size: .95rem;
+    letter-spacing: .5px;
+    border-radius: 12px;
+    padding: .65rem 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 6px 14px -5px rgba(21,128,61,.5);
+  }
+  .seat-grid {
+    display: grid;
+    gap: 6px;
+  }
+  .seat-cell {
+    border-radius: 10px;
+    padding: .4rem .3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    transition: all .15s;
+    border: 2px solid transparent;
+    user-select: none;
+  }
+  .seat-filled {
+    background: linear-gradient(145deg, #ffffff, #f0fdf4);
+    border-color: #86efac;
+    box-shadow: 0 3px 8px -4px rgba(21,128,61,.3), inset 0 1px 0 rgba(255,255,255,.9);
+    cursor: grab;
+  }
+  .seat-filled:active { cursor: grabbing; }
+  .seat-empty {
+    background: rgba(255,255,255,.35);
+    border: 2px dashed #bbf7d0;
+    cursor: default;
+  }
+  .seat-dragging {
+    opacity: .45;
+    transform: scale(.95);
+    box-shadow: 0 10px 22px -6px rgba(21,128,61,.4) !important;
+  }
+  .seat-over {
+    border-color: #22c55e !important;
+    background: linear-gradient(145deg, #dcfce7, #bbf7d0) !important;
+    transform: scale(1.06);
+  }
+  .seat-num  { font-size: .65rem; color: #15803d; font-weight: 700; line-height: 1; }
+  .seat-name { font-size: .82rem; font-weight: 700; color: #14532d; line-height: 1.2; text-align: center; word-break: break-all; }
+
+  /* 自由排列 */
+  .seat-classroom-free .seat-free-area {
+    position: relative;
+    width: 100%;
+    height: 420px;
+    background:
+      linear-gradient(rgba(134,239,172,.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(134,239,172,.15) 1px, transparent 1px),
+      linear-gradient(150deg, #f0fdf4, #dcfce7);
+    background-size: 40px 40px, 40px 40px, 100% 100%;
+    border-radius: 12px;
+    border: 1px solid #86efac;
+    overflow: hidden;
+  }
+  .seat-free-card {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    min-height: 52px;
+    background: linear-gradient(145deg, #ffffff, #f0fdf4);
+    border: 2px solid #86efac;
+    border-radius: 10px;
+    padding: .4rem .3rem;
+    box-shadow: 0 3px 8px -4px rgba(21,128,61,.3);
+    transition: box-shadow .12s;
+  }
+  .seat-free-draggable { cursor: grab; }
+  .seat-free-draggable:active { cursor: grabbing; }
+  .seat-free-dragging {
+    box-shadow: 0 14px 28px -8px rgba(21,128,61,.45) !important;
+    border-color: #22c55e;
+    z-index: 10;
+  }
+  .seat-free-unplaced {
+    border-color: #fcd34d;
+    background: linear-gradient(145deg, #fffbeb, #fef9c3);
+    opacity: .85;
+  }
+
+  /* ── 加扣分：全班排行折疊 ── */
+  details > summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▶ "; font-size: .7em; color: #94a3b8; transition: transform .2s; display: inline-block; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  /* 公告折疊：標題列已自備箭頭(.ann-arrow)，移除全域 ::before 重複箭頭並確保標題靠左 */
+  details.ann-details > summary::before { content: none; }
+  details.ann-details > summary { text-align: left; }
+  details.ann-details > summary h3 { text-align: left; }
+
+  /* ── 模組分頁標籤 ── */
+  .mod-tab {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .45rem .9rem; border-radius: 12px; font-size: .82rem; font-weight: 700;
+    cursor: pointer; border: 2px solid transparent;
+    background: rgba(255,255,255,.7); color: #475569;
+    box-shadow: 0 2px 6px -2px rgba(0,0,0,.1);
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .mod-tab:hover { background: rgba(255,255,255,.95); color: #1e293b; }
+  .mod-tab.active {
+    background: linear-gradient(135deg, var(--tab-from, #818cf8), var(--tab-to, #6366f1));
+    color: #fff; border-color: transparent;
+    box-shadow: 0 4px 12px -3px var(--tab-shadow, rgba(99,102,241,.5));
+  }
+  #modTabBar { padding-bottom: .5rem; display: flex; align-items: flex-start; gap: .5rem; flex-wrap: wrap; }
+  .mod-tab-toggle {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .4rem .85rem; border-radius: 12px; font-size: .78rem; font-weight: 700;
+    cursor: pointer; border: 2px solid #e2e8f0;
+    background: rgba(255,255,255,.85); color: #64748b;
+    box-shadow: 0 1px 4px -1px rgba(0,0,0,.08);
+    transition: all .15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .mod-tab-toggle:hover { border-color: #6366f1; color: #4f46e5; background: #fff; }
+  #modTabList { display: flex; gap: .5rem; flex-wrap: wrap; flex: 1; }
+
+  /* ── 純本地模式 ── */
+  .mode-card { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .mode-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px -8px rgba(0,0,0,.15); }
+  .b-violet {
+    background: linear-gradient(145deg,#a78bfa,#7c3aed);
+    color:#fff; border:none;
+    box-shadow: 0 4px 0 #5b21b6;
+  }
+  .b-violet:hover { filter: brightness(1.08); }
+  .b-violet:active { transform: translateY(4px); box-shadow: 0 1px 0 #5b21b6; }
+  .b-emerald {
+    background: linear-gradient(145deg,#34d399,#059669);
+    color:#fff; border:none;
+    box-shadow: 0 4px 0 #047857;
+  }
+  .b-emerald:hover { filter: brightness(1.08); }
+  .b-emerald:active { transform: translateY(4px); box-shadow: 0 1px 0 #047857; }
+  .local-io-btn { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem 1rem; border-radius: 10px; font-size: .82rem; font-weight: 700; cursor: pointer; border: none; transition: filter .15s, transform .1s; }
+  .local-io-export { background: linear-gradient(135deg,#a78bfa,#7c3aed); color:#fff; box-shadow: 0 3px 0 #5b21b6; }
+  .local-io-export:hover { filter: brightness(1.1); }
+  .local-io-import { background: linear-gradient(135deg,#34d399,#059669); color:#fff; box-shadow: 0 3px 0 #047857; }
+  .local-io-import:hover { filter: brightness(1.1); }
+  /* ── ImgHost 圖床選擇器 ── */
+  .imghost-row {
+    border: 2px solid #e2e8f0; border-radius: 12px; padding: .7rem .9rem;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .imghost-row:hover { border-color: #a5b4fc; background: #f5f3ff; }
+  .imghost-selected { border-color: #6366f1 !important; background: #eef2ff !important; }
+  .imghost-key-input { font-size: .75rem; border: 1px solid #cbd5e1; border-radius: 8px; padding: .25rem .6rem; outline: none; }
+  .imghost-key-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px #e0e7ff; }
+  /* ── 回條縮圖格 ── */
+  .slip-thumbs-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+  .slip-thumb {
+    position: relative; width: 48px; height: 48px; border-radius: 8px; overflow: hidden;
+    cursor: pointer; border: 2px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; font-size: 10px; transition: transform .15s, box-shadow .15s;
+    background: #f8fafc;
+  }
+  .slip-thumb:hover { transform: scale(1.08); box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .slip-thumb-none  { border-color: #e2e8f0; background: #f1f5f9; color: #94a3b8; }
+  .slip-thumb-pending { border-color: #fbbf24; background: #fffbeb; }
+  .slip-thumb-ok    { border-color: #34d399; background: #ecfdf5; }
+  .slip-thumb-rej   { border-color: #f87171; background: #fff1f2; }
+  .slip-thumb-img   { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .85; }
+  .slip-thumb-seat  { position: relative; z-index: 1; font-weight: 700; font-size: 11px; line-height: 1; text-shadow: 0 1px 2px rgba(255,255,255,.8); }
+  .slip-thumb-badge { position: absolute; bottom: 1px; right: 1px; font-size: 10px; z-index: 2; line-height: 1; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ 頂部導覽列 ════════════════════ -->
+<header class="glass-nav sticky top-0 z-30">
+  <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="brand-pill w-10 h-10 rounded-2xl text-white grid place-items-center font-black shrink-0">親</div>
+      <div class="min-w-0">
+        <h1 id="className" class="font-black text-base leading-tight truncate text-slate-700">班級親師互動網</h1>
+        <p class="text-xs text-slate-400 leading-tight">Parent–Teacher Hub</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <span id="loginBadge" class="hidden text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold shadow-sm"></span>
+      <button id="btnLogin" class="btn3d b-indigo text-sm">登入</button>
+      <button id="btnLocalClass" onclick="showLocalClassSetup(false)" class="hidden btn3d b-violet text-sm" title="切換班級">🏫</button>
+      <button id="btnLocalExport" onclick="localExportClass(window._localActiveId||'')" class="hidden btn3d b-emerald text-sm" title="匯出備份">⬇️ 備份</button>
+      <button id="btnAdmin" onclick="openAdmin()" class="hidden btn3d b-slate text-sm">🛠️ 後台</button>
+      <button id="btnLogout" class="hidden btn3d b-slate text-sm">登出</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- 未設定 Firebase 時的引導區塊 -->
+  <section id="setupGuide" class="hidden card-3d theme-violet text-center">
+    <div class="card-body space-y-4 py-8">
+      <div class="text-6xl">🔧</div>
+      <h2 class="text-2xl font-black text-violet-700">尚未連線資料庫</h2>
+      <p class="text-slate-500 text-sm leading-relaxed">本系統需要連結您自己的 <b>免費 Firebase 專案</b> 才能運作。<br/>請先閱讀說明並完成設定。</p>
+      <div class="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+        <button onclick="openHelp()" class="btn3d b-amber text-base">📖 如何設定 Firebase</button>
+        <button onclick="openSettings()" class="btn3d b-blue text-base">⚙️ 設定 Firebase 連線</button>
+      </div>
+      <p class="text-xs text-slate-400 pt-3">Made by
+        <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener" class="font-bold text-violet-600 underline">阿剛老師</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- 連線狀態列 -->
+  <div id="connBar" class="hidden text-xs text-slate-400 flex items-center justify-between px-1">
+    <span id="connStatus" class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> 連線中…</span>
+    <button onclick="openSettings()" class="underline hover:text-slate-600">設定 / 分享</button>
+  </div>
+
+  <!-- ── 教師分頁標籤列（切換按鈕 + 分頁標籤） ── -->
+  <div id="modTabBar" class="hidden">
+    <div id="modTabList"></div>
+  </div>
+
+  <!-- ── 功能模組容器 ── -->
+  <div id="moduleArea" class="hidden space-y-6">
+
+    <!-- 1. 每日聯絡簿（天藍色系） -->
+    <section data-module="contactbook" class="card-3d theme-sky">
+      <div class="card-head">
+        <div class="head-icon">📒</div>
+        <h2 class="card-title flex-1">每日聯絡簿 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickContactbook()" class="teacher-only hidden btn3d b-blue text-xs">✏️ 編輯聯絡簿</button>
+        <button onclick="openContactbookFullscreen()" class="text-sm px-2.5 py-1.5 rounded-xl bg-white/70 shadow-inner hover:bg-white" title="放大全螢幕顯示，方便抄寫">🔍 放大</button>
+        <input type="date" id="cbDate" class="text-sm border-0 rounded-xl px-3 py-1.5 bg-white/70 shadow-inner" />
+      </div>
+      <div class="card-body">
+        <div id="cbLocked" class="locked-msg hidden">🔒 此區需登入後查看，請點右上角「登入」。</div>
+        <div id="cbBody">
+          <div id="cbContent" class="rich-content text-sm leading-relaxed text-slate-700 min-h-[2rem]">尚無內容。</div>
+          <div id="cbReadRow" class="hidden mt-4 pt-4 border-t border-white/70 flex items-center justify-between flex-wrap gap-2">
+            <span id="cbReadState" class="text-sm text-slate-500"></span>
+            <button id="cbReadBtn" onclick="markRead()" class="btn3d b-emerald text-sm">✋ 我已閱讀</button>
+          </div>
+        </div>
+        <!-- 教師檢視：家長已讀狀況（免進後台） -->
+        <div id="cbReadReport" class="hidden mt-4 pt-4 border-t border-white/70"></div>
+      </div>
+    </section>
+
+    <!-- 2. 作業檢核即時狀況（琥珀色系） -->
+    <section id="hwSection" class="card-3d theme-amber">
+      <div class="card-head">
+        <div class="head-icon">📝</div>
+        <h2 class="card-title flex-1">今日作業繳交即時狀況</h2>
+        <button onclick="quickHomework()" class="teacher-only hidden btn3d b-amber text-xs">🔄 建立今日檢核</button>
+        <button id="hwInlineBtn" onclick="toggleHwInline()" class="hidden btn3d b-amber text-xs">✏️ 立即檢核</button>
+      </div>
+      <div class="card-body">
+        <div id="hwLocked" class="locked-msg hidden">🔒 此區需登入後查看當日作業繳交情況。</div>
+        <div id="hwViewWrap">
+          <div class="hw-legend text-xs text-slate-500 mb-3">
+            <span><i class="hw-dot hw-0"></i>未繳交</span>
+            <span><i class="hw-dot hw-1"></i>已繳交</span>
+            <span><i class="hw-dot hw-2"></i>待訂正</span>
+            <span><i class="hw-dot hw-3"></i>已訂正</span>
+          </div>
+          <div id="hwViewBox" class="overflow-x-auto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 班級自製日曆（紫羅蘭色系） -->
+    <section data-module="calendar" class="card-3d theme-violet">
+      <div class="card-head">
+        <div class="head-icon">📅</div>
+        <h2 class="card-title flex-1">班級日曆 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickEvent()" class="teacher-only hidden btn3d b-indigo text-xs">➕ 新增活動</button>
+        <div class="flex items-center gap-2">
+          <button onclick="calMove(-1)" class="w-8 h-8 rounded-xl bg-white/70 shadow-inner hover:bg-white">‹</button>
+          <span id="calLabel" class="text-sm font-bold text-violet-700 w-24 text-center"></span>
+          <button onclick="calMove(1)" class="w-8 h-8 rounded-xl bg-white/70 shadow-inner hover:bg-white">›</button>
+        </div>
+      </div>
+      <div class="card-body !p-3">
+        <div id="calLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="calGrid" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
+      </div>
+    </section>
+
+    <!-- 4. 公告與榮譽榜（玫瑰色系） -->
+    <section data-module="announcements" class="card-3d theme-rose">
+      <div class="card-head">
+        <div class="head-icon">📣</div>
+        <h2 class="card-title flex-1">公告與榮譽榜 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickAnnouncement()" class="teacher-only hidden btn3d b-rose text-xs">➕ 新增公告</button>
+      </div>
+      <div class="card-body">
+        <div id="annLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="annList" class="space-y-4"></div>
+      </div>
+    </section>
+
+    <!-- 5. 回條拍照回傳（翠綠色系） -->
+    <section data-module="slips" class="card-3d theme-emerald">
+      <div class="card-head">
+        <div class="head-icon">📎</div>
+        <h2 class="card-title flex-1">紙本回條回傳 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickSlip()" class="teacher-only hidden btn3d b-emerald text-xs">➕ 建立回條</button>
+      </div>
+      <div class="card-body">
+        <div id="slipLocked" class="locked-msg hidden">🔒 此區涉及個資，需登入後查看。</div>
+        <div id="slipList" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- 6. 資源充電站（薄荷綠色系） -->
+    <section data-module="resources" class="card-3d theme-emerald">
+      <div class="card-head">
+        <div class="head-icon">⚡</div>
+        <h2 class="card-title flex-1">資源充電站 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickResource()" class="teacher-only hidden btn3d b-emerald text-xs">➕ 新增連結</button>
+      </div>
+      <div class="card-body">
+        <div id="resLocked" class="locked-msg hidden">🔒 此區需登入後查看。</div>
+        <div id="resList" class="space-y-5"></div>
+      </div>
+    </section>
+
+    <!-- 7. 今日小考成績（琥珀色系） -->
+    <section data-module="quiz" class="card-3d theme-amber">
+      <div class="card-head">
+        <div class="head-icon">📊</div>
+        <h2 class="card-title flex-1">今日小考成績 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="quickQuiz()" class="teacher-only hidden btn3d b-amber text-xs">➕ 發布成績</button>
+        <select id="quizDate" class="text-sm border-0 rounded-xl px-2 py-1.5 bg-white/70 shadow-inner"></select>
+      </div>
+      <div class="card-body">
+        <div id="quizLocked" class="locked-msg hidden">🔒 此區需登入後查看自己孩子的成績。</div>
+        <div id="quizBox"></div>
+      </div>
+    </section>
+
+    <!-- 8. 課堂加扣分（靛藍色系） -->
+    <section data-module="points" class="card-3d theme-violet">
+      <div class="card-head">
+        <div class="head-icon">⭐</div>
+        <h2 class="card-title flex-1">課堂加扣分 <span class="modlock text-xs align-middle"></span></h2>
+        <button id="ptManageBtn" onclick="ptManage()" class="teacher-only hidden btn3d b-indigo text-xs">⚙️ 管理</button>
+      </div>
+      <div class="card-body">
+        <div id="ptLocked" class="locked-msg hidden">🔒 此區需登入後查看孩子的點數與全班排行。</div>
+        <div id="ptBody"></div>
+      </div>
+    </section>
+
+    <!-- 9. 課堂小工具（紫羅蘭色系） -->
+    <section data-module="tools" class="card-3d theme-violet">
+      <div class="card-head">
+        <div class="head-icon">🧰</div>
+        <h2 class="card-title flex-1">課堂小工具 <span class="modlock text-xs align-middle"></span></h2>
+      </div>
+      <div class="card-body">
+        <div id="toolsLocked" class="locked-msg hidden">🔒 此區需登入後使用。</div>
+        <div id="toolsContent" class="hidden">
+          <div class="flex gap-4">
+            <!-- 抽人 -->
+            <button onclick="openPicker()" class="tools-card-btn tools-btn-picker">
+              <span class="tc-icon">🎰</span>
+              <span class="tc-label">隨機抽人</span>
+              <span class="tc-sub">可設定不重複</span>
+            </button>
+            <!-- 計時器 -->
+            <button onclick="openTimer()" class="tools-card-btn tools-btn-timer">
+              <span class="tc-icon">⏱️</span>
+              <span class="tc-label">倒數計時器</span>
+              <span class="tc-sub">支援全螢幕顯示</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10. 班級座位表（翠綠色系） -->
+    <section data-module="seating" class="card-3d theme-emerald">
+      <div class="card-head">
+        <div class="head-icon">🪑</div>
+        <h2 class="card-title flex-1">班級座位表 <span class="modlock text-xs align-middle"></span></h2>
+        <button onclick="openSeatingEditor()" class="teacher-only hidden btn3d b-emerald text-xs">✏️ 編輯座位表</button>
+        <button onclick="downloadSeatPdf()" class="teacher-only hidden btn3d b-slate text-xs">⬇️ PDF</button>
+      </div>
+      <div class="card-body">
+        <div id="seatLocked" class="locked-msg hidden">🔒 此區需登入後查看座位表。</div>
+        <div id="seatContent"></div>
+      </div>
+    </section>
+
+    <!-- 不重複訪客統計（以下為固定置底，模組排序的錨點） -->
+    <div id="moduleTail" class="text-center text-xs text-slate-400 pt-1">
+      👁️ 今日不重複觀看：<span id="visitCount" class="font-bold text-slate-500">—</span> 人
+    </div>
+
+  </div>
+</main>
+
+<!-- ════════════════════ 頁尾：作者與授權 ════════════════════ -->
+<footer class="max-w-3xl mx-auto px-4 py-8 text-center space-y-2">
+  <div class="text-xs text-slate-400">
+    <button onclick="openHelp()" class="underline hover:text-slate-600">使用說明</button> ·
+    <button onclick="openSettings()" class="underline hover:text-slate-600">系統設定</button>
+  </div>
+  <p class="text-sm text-slate-500">
+    Made by
+    <a href="https://kentxchang.blogspot.tw" target="_blank" rel="noopener" class="font-black text-indigo-600 hover:text-indigo-700 underline">阿剛老師</a>
+  </p>
+  <p class="text-[11px] text-slate-400 leading-relaxed max-w-md mx-auto">
+    本網頁作品採用
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh_TW" target="_blank" rel="noopener" class="underline hover:text-slate-600">創用 CC「姓名標示-非商業性-相同方式分享 4.0」</a>
+    國際授權條款釋出。歡迎教學非營利使用，使用時請保留作者姓名標示。
+  </p>
+</footer>
+
+<!-- 家長登入後出現的浮動「聯絡老師」按鈕 -->
+<button id="floatContact" onclick="openParentChat()" class="hidden fixed bottom-5 right-5 z-40 btn3d b-indigo !rounded-full w-16 h-16 !p-0 flex items-center justify-center text-2xl shadow-2xl" title="聯絡老師">
+  💬
+  <span id="floatBadge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center">0</span>
+</button>
+
+<!-- 老師登入後出現的浮動「家長私訊」按鈕 -->
+<button id="floatTeacher" onclick="openTeacherInbox()" class="hidden fixed bottom-5 right-5 z-40 btn3d b-indigo !rounded-full w-16 h-16 !p-0 flex items-center justify-center text-2xl shadow-2xl" title="家長私訊">
+  📨
+  <!-- 未讀家長私訊（紅）／未回覆對話（琥珀） -->
+  <span id="ftUnread" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center" title="未讀家長私訊">0</span>
+  <span id="ftUnreplied" class="hidden absolute -top-1 -left-1 bg-amber-500 text-white text-[11px] font-bold rounded-full min-w-[20px] h-5 px-1 grid place-items-center" title="未回覆對話">0</span>
+</button>
+
+<!-- 彈窗根節點 -->
+<div id="modalRoot"></div>
+<!-- Toast 根節點 -->
+<div id="toastRoot" class="fixed top-5 right-4 z-[9999] flex flex-col gap-2 items-end pointer-events-none"></div>
+
+<!-- ════════ JS 載入（依賴順序） ════════ -->
+<script src="js/00-local-db.js?v=20260627m"></script>
+<script src="js/01-config-core.js?v=20260627m"></script>
+<script src="js/90-imghost.js?v=20260627m"></script>
+<script src="js/02-app-core.js?v=20260627m"></script>
+<script src="js/03-auth.js?v=20260627m"></script>
+<script src="js/04-utils.js?v=20260627m"></script>
+<script src="js/10-contactbook.js?v=20260627m"></script>
+<script src="js/11-homework.js?v=20260627m"></script>
+<script src="js/12-calendar.js?v=20260627m"></script>
+<script src="js/13-announcements.js?v=20260627m"></script>
+<script src="js/14-slips.js?v=20260627m"></script>
+<script src="js/15-resources.js?v=20260627m"></script>
+<script src="js/16-quiz.js?v=20260627m"></script>
+<script src="js/20-visitor-help-settings.js?v=20260627m"></script>
+<script src="js/30-admin.js?v=20260627m"></script>
+<script src="js/40-quick.js?v=20260627m"></script>
+<script src="js/50-messages.js?v=20260627m"></script>
+<script src="js/60-points.js?v=20260627m"></script>
+<script src="js/70-seating.js?v=20260627m"></script>
+<script src="js/80-tools.js?v=20260627m"></script>
+
+</body>
+</html>
