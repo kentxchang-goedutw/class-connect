@@ -32,6 +32,7 @@
   var freeDragId = null;    // 自由模式：拖曳中的學生 id
   var freeDragOffX = 0, freeDragOffY = 0;
   var FREE_SCALE = 1.0;     // 自由模式圖卡縮放比例（暫存，不存 DB）
+  var _teacherView = false; // 教師視角：左右鏡像呈現（只影響顯示，不改資料）
 
   /* 預設設定 */
   var DEFAULT_SEATING = { mode: "rows", rows: 6, cols: 8, rowLayout: [], freeLayout: [], freeScale: 1.0 };
@@ -72,6 +73,9 @@
     if (content) content.classList.remove("hidden");
 
     var s = SEATING || DEFAULT_SEATING;
+    // 教師視角切換鈕：僅「按列模式」有意義（自由模式為座標排列）
+    var viewBtn = document.getElementById("seatViewToggle");
+    if (viewBtn) viewBtn.classList.toggle("hidden", s.mode !== "rows");
     if (s.mode === "rows") renderRowsView(s, false);
     else renderFreeView(s, false);
   }
@@ -85,14 +89,18 @@
     var stuMap = {};
     students.forEach(function(st) { stuMap[st.id] = st; });
 
-    var html = '<div class="seat-classroom">';
-    // 黑板
-    html += '<div class="seat-board">📋 黑板（前方）</div>';
+    // 教師視角：左右鏡像（只在唯讀主畫面；編輯模式維持原始座標以利拖曳）
+    var mirror = (!isEdit && _teacherView);
+
+    var html = '<div class="seat-classroom' + (mirror ? ' seat-teacher-view' : '') + '">';
+    // 黑板：教師視角時站在黑板前看向全班
+    html += '<div class="seat-board">' + (mirror ? '🧑‍🏫 講台（教師視角）' : '📋 黑板（前方）') + '</div>';
     // 座位格
     html += '<div class="seat-grid" style="grid-template-columns:repeat(' + cols + ',1fr);">';
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        var sid = (layout[r] || [])[c] || "";
+        var srcCol = mirror ? (cols - 1 - c) : c;   // 教師視角：欄反向
+        var sid = (layout[r] || [])[srcCol] || "";
         var st = stuMap[sid];
         var name = st ? st.name : "";
         var seat = st ? st.seat : "";
@@ -150,14 +158,18 @@
         cell.classList.remove("seat-over");
         if (!dragSrc) return;
         var destRow = +cell.dataset.row, destCol = +cell.dataset.col;
-        if (dragSrc[0] === destRow && dragSrc[1] === destCol) return;
-        // 互換
-        var srcVal = (layout[dragSrc[0]] || [])[dragSrc[1]] || "";
-        var dstVal = (layout[destRow] || [])[destCol] || "";
-        layout[dragSrc[0]][dragSrc[1]] = dstVal;
-        layout[destRow][destCol] = srcVal;
+        if (dragSrc[0] === destRow && dragSrc[1] === destCol) { dragSrc = null; return; }
+        // 邊界檢查，避免拖放到範圍外造成多餘列/欄
+        if (dragSrc[0] < 0 || dragSrc[0] >= rows || dragSrc[1] < 0 || dragSrc[1] >= cols ||
+            destRow < 0 || destRow >= rows || destCol < 0 || destCol >= cols) { dragSrc = null; return; }
+        // 以固定 rows×cols 正規化後互換
+        var fixed = ensureRowLayout(layout, rows, cols);
+        var srcVal = (fixed[dragSrc[0]] || [])[dragSrc[1]] || "";
+        var dstVal = (fixed[destRow] || [])[destCol] || "";
+        fixed[dragSrc[0]][dragSrc[1]] = dstVal;
+        fixed[destRow][destCol] = srcVal;
         dragSrc = null;
-        saveRowLayout(layout);
+        saveRowLayout(fixed);
       });
     });
   }
@@ -451,15 +463,20 @@
         cell.classList.remove("seat-over");
         if (!dragSrc) return;
         var dr = +cell.dataset.row, dc = +cell.dataset.col;
-        if (dragSrc[0] === dr && dragSrc[1] === dc) return;
-        var srcVal = (layout[dragSrc[0]] || [])[dragSrc[1]] || "";
-        var dstVal = (layout[dr] || [])[dc] || "";
-        layout[dragSrc[0]][dragSrc[1]] = dstVal;
-        layout[dr][dc] = srcVal;
+        if (dragSrc[0] === dr && dragSrc[1] === dc) { dragSrc = null; return; }
+        // 邊界檢查：拖放索引必須落在目前行列數範圍內，避免產生超出格子的列/欄
+        if (dragSrc[0] < 0 || dragSrc[0] >= rows || dragSrc[1] < 0 || dragSrc[1] >= cols ||
+            dr < 0 || dr >= rows || dc < 0 || dc >= cols) { dragSrc = null; return; }
+        // 以固定 rows×cols 正規化版面後再互換，確保不會殘留多餘列/欄
+        var fixed = ensureRowLayout(layout, rows, cols);
+        var srcVal = (fixed[dragSrc[0]] || [])[dragSrc[1]] || "";
+        var dstVal = (fixed[dr] || [])[dc] || "";
+        fixed[dragSrc[0]][dragSrc[1]] = dstVal;
+        fixed[dr][dc] = srcVal;
         dragSrc = null;
-        if (SEATING) SEATING._editLayout = layout;
-        // 重繪
-        renderRowsViewInto(container, Object.assign({}, SEATING || DEFAULT_SEATING, { rowLayout: layout }), true);
+        if (SEATING) SEATING._editLayout = fixed;
+        // 重繪：固定使用相同 rows/cols
+        renderRowsViewInto(container, Object.assign({}, SEATING || DEFAULT_SEATING, { rows: rows, cols: cols, rowLayout: fixed }), true);
       });
     });
   }
@@ -592,6 +609,13 @@
     var students = (APP_STATE.students || []).slice().sort(function(a, b) { return (a.seat||0) - (b.seat||0); });
 
     if (s.mode === "rows") {
+      // 限制：學生人數不可超過座位總數（行×列）
+      var capacity = (s.rows || 0) * (s.cols || 0);
+      if (students.length > capacity) {
+        if (typeof toast === "function")
+          toast("人數比座位數多（學生 " + students.length + " 人，座位 " + capacity + " 個＝" + s.rows + "列×" + s.cols + "欄），請增加列數或欄數後再試。", "error");
+        return false;
+      }
       var layout = [];
       var idx = 0;
       for (var r = 0; r < s.rows; r++) {
@@ -727,7 +751,8 @@
   };
 
   window.adminSeatAutoFill = function() {
-    window.seatAutoFill && window.seatAutoFill();
+    // seatAutoFill 失敗（人數超過座位數）時回傳 false，這時不要儲存
+    if (window.seatAutoFill && window.seatAutoFill() === false) return;
     window.saveSeating && window.saveSeating();
   };
 
@@ -748,6 +773,19 @@
   window.renderSeating     = renderSeating;
   window.openSeatingEditor = openSeatingEditor;
   window.adminSeating      = adminSeating;
+
+  /* 切換教師視角（左右鏡像，只影響顯示） */
+  window.toggleSeatTeacherView = function() {
+    _teacherView = !_teacherView;
+    var btn = document.getElementById("seatViewToggle");
+    if (btn) {
+      btn.textContent = _teacherView ? "👥 學生視角" : "👁️ 教師視角";
+      btn.classList.toggle("b-amber", _teacherView);
+      btn.classList.toggle("b-indigo", !_teacherView);
+    }
+    if (typeof toast === "function") toast(_teacherView ? "已切換為教師視角（左右鏡像）" : "已切換為學生視角", "info");
+    renderSeating();
+  };
 
   /* 用 escapeHtml（來自 04-utils.js） */
   function escapeHtml(s) {

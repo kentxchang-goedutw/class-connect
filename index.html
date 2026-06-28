@@ -856,6 +856,7 @@
       <div class="card-head">
         <div class="head-icon">🪑</div>
         <h2 class="card-title flex-1">班級座位表 <span class="modlock text-xs align-middle"></span></h2>
+        <button id="seatViewToggle" onclick="toggleSeatTeacherView()" class="btn3d b-indigo text-xs">👁️ 教師視角</button>
         <button onclick="openSeatingEditor()" class="teacher-only hidden btn3d b-emerald text-xs">✏️ 編輯座位表</button>
         <button onclick="downloadSeatPdf()" class="teacher-only hidden btn3d b-slate text-xs">⬇️ PDF</button>
       </div>
@@ -910,26 +911,26 @@
 <div id="toastRoot" class="fixed top-5 right-4 z-[9999] flex flex-col gap-2 items-end pointer-events-none"></div>
 
 <!-- ════════ JS 載入（依賴順序） ════════ -->
-<script src="js/00-local-db.js?v=20260627m"></script>
-<script src="js/01-config-core.js?v=20260627m"></script>
-<script src="js/90-imghost.js?v=20260627m"></script>
-<script src="js/02-app-core.js?v=20260627m"></script>
-<script src="js/03-auth.js?v=20260627m"></script>
-<script src="js/04-utils.js?v=20260627m"></script>
-<script src="js/10-contactbook.js?v=20260627m"></script>
-<script src="js/11-homework.js?v=20260627m"></script>
-<script src="js/12-calendar.js?v=20260627m"></script>
-<script src="js/13-announcements.js?v=20260627m"></script>
-<script src="js/14-slips.js?v=20260627m"></script>
-<script src="js/15-resources.js?v=20260627m"></script>
-<script src="js/16-quiz.js?v=20260627m"></script>
-<script src="js/20-visitor-help-settings.js?v=20260627m"></script>
-<script src="js/30-admin.js?v=20260627m"></script>
-<script src="js/40-quick.js?v=20260627m"></script>
-<script src="js/50-messages.js?v=20260627m"></script>
-<script src="js/60-points.js?v=20260627m"></script>
-<script src="js/70-seating.js?v=20260627m"></script>
-<script src="js/80-tools.js?v=20260627m"></script>
+<script src="js/00-local-db.js?v=20260627q"></script>
+<script src="js/01-config-core.js?v=20260627q"></script>
+<script src="js/90-imghost.js?v=20260627q"></script>
+<script src="js/02-app-core.js?v=20260627q"></script>
+<script src="js/03-auth.js?v=20260627q"></script>
+<script src="js/04-utils.js?v=20260627q"></script>
+<script src="js/10-contactbook.js?v=20260627q"></script>
+<script src="js/11-homework.js?v=20260627q"></script>
+<script src="js/12-calendar.js?v=20260627q"></script>
+<script src="js/13-announcements.js?v=20260627q"></script>
+<script src="js/14-slips.js?v=20260627q"></script>
+<script src="js/15-resources.js?v=20260627q"></script>
+<script src="js/16-quiz.js?v=20260627q"></script>
+<script src="js/20-visitor-help-settings.js?v=20260627q"></script>
+<script src="js/30-admin.js?v=20260627q"></script>
+<script src="js/40-quick.js?v=20260627q"></script>
+<script src="js/50-messages.js?v=20260627q"></script>
+<script src="js/60-points.js?v=20260627q"></script>
+<script src="js/70-seating.js?v=20260627q"></script>
+<script src="js/80-tools.js?v=20260627q"></script>
 
 </body>
 </html>

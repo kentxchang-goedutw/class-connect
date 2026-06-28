@@ -169,7 +169,7 @@ function adminStudents(body) {
     </tr>`).join("");
   body.innerHTML = `
     <div class="space-y-5">
-      <div class="flex items-center justify-between"><h4 class="font-bold text-sm">學生名單（${APP_STATE.students.length} 人）</h4><button onclick="editStudent()" class="btn3d b-blue text-xs">＋ 新增單筆</button></div>
+      <div class="flex items-center justify-between flex-wrap gap-2"><h4 class="font-bold text-sm">學生名單（${APP_STATE.students.length} 人）</h4><div class="flex gap-2 flex-wrap"><button onclick="downloadStudentCardsPdf()" class="btn3d b-rose text-xs">🪪 下載帳密卡PDF</button><button onclick="editStudent()" class="btn3d b-blue text-xs">＋ 新增單筆</button></div></div>
       <div class="overflow-x-auto border rounded-xl"><table class="w-full text-sm"><thead class="bg-slate-50 text-slate-500 text-xs"><tr><th class="py-2 px-2 text-left">座號</th><th class="py-2 px-2 text-left">姓名</th><th class="py-2 px-2 text-left">密碼</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="text-center py-4 text-slate-400">尚無學生</td></tr>'}</tbody></table></div>
       <div class="border-t pt-4 space-y-2">
         <h4 class="font-bold text-sm">📋 批次匯入學生帳號</h4>
@@ -180,6 +180,133 @@ function adminStudents(body) {
     </div>`;
   document.getElementById("doBulkStu").onclick = bulkImportStudents;
 }
+
+/* ── 下載學生帳號密碼卡 PDF（A4、每列 4 張卡片）── */
+function _loadJsPdfAdmin() {
+  return new Promise(function(resolve, reject) {
+    if (window.jspdf && window.jspdf.jsPDF) { resolve(); return; }
+    var s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    s.onload = function(){ resolve(); };
+    s.onerror = function(){ reject(new Error("jsPDF 載入失敗，請檢查網路")); };
+    document.head.appendChild(s);
+  });
+}
+
+// 用 canvas 畫一張漂亮的帳密卡，回傳 dataURL（避免 jsPDF 中文亂碼）
+function _renderStudentCardCanvas(stu, wPx, hPx) {
+  var canvas = document.createElement("canvas");
+  canvas.width = wPx; canvas.height = hPx;
+  var ctx = canvas.getContext("2d");
+  var W = wPx, H = hPx, pad = Math.round(wPx * 0.06);
+
+  // 圓角卡片背景 + 漸層
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  var grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, "#eef2ff");
+  grad.addColorStop(1, "#fdf2f8");
+  ctx.fillStyle = grad;
+  roundRect(2, 2, W - 4, H - 4, Math.round(wPx * 0.06)); ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = "#c7d2fe"; ctx.stroke();
+
+  // 頂部色條
+  ctx.fillStyle = "#6366f1";
+  roundRect(2, 2, W - 4, Math.round(H * 0.20), Math.round(wPx * 0.06)); ctx.fill();
+  ctx.fillStyle = "#6366f1";
+  ctx.fillRect(2, Math.round(H * 0.13), W - 4, Math.round(H * 0.07));
+
+  var fam = "'Microsoft JhengHei','PingFang TC','Heiti TC',sans-serif";
+  // 座號（色條上）
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold " + Math.round(H * 0.11) + "px " + fam;
+  ctx.textBaseline = "middle";
+  ctx.fillText((stu.seat != null ? stu.seat + " 號" : ""), pad, Math.round(H * 0.11));
+
+  // 姓名
+  ctx.fillStyle = "#1e293b";
+  ctx.font = "bold " + Math.round(H * 0.15) + "px " + fam;
+  ctx.fillText(stu.name || "（未命名）", pad, Math.round(H * 0.42));
+
+  // 密碼標籤
+  ctx.fillStyle = "#64748b";
+  ctx.font = Math.round(H * 0.075) + "px " + fam;
+  ctx.fillText("登入密碼", pad, Math.round(H * 0.62));
+
+  // 密碼值（等寬、放大）
+  ctx.fillStyle = "#be123c";
+  ctx.font = "bold " + Math.round(H * 0.14) + "px 'Consolas','Courier New',monospace";
+  ctx.fillText(String(stu.password || "—"), pad, Math.round(H * 0.78));
+
+  return canvas.toDataURL("image/png");
+}
+
+// 以 canvas 繪製中文標題列（jsPDF 內建字型不支援中文）
+function _renderPdfTitleCanvas(text) {
+  var scale = 4, wmm = 120, hmm = 7;
+  var canvas = document.createElement("canvas");
+  canvas.width = Math.round(wmm * 3.78 * scale);
+  canvas.height = Math.round(hmm * 3.78 * scale);
+  var ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#475569";
+  ctx.font = "bold 18px 'Microsoft JhengHei','PingFang TC','Heiti TC',sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 2, hmm * 3.78 / 2);
+  return canvas.toDataURL("image/png");
+}
+
+async function downloadStudentCardsPdf() {
+  var students = (APP_STATE.students || []).slice().sort(function(a, b){ return (Number(a.seat)||0) - (Number(b.seat)||0); });
+  if (!students.length) { toast("尚無學生資料", "warn"); return; }
+  toast("PDF 產生中，請稍候…", "info");
+  try {
+    await _loadJsPdfAdmin();
+    var jsPDF = window.jspdf.jsPDF;
+    var pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+    var pageW = pdf.internal.pageSize.getWidth();   // 210
+    var pageH = pdf.internal.pageSize.getHeight();  // 297
+
+    var cols = 4, marginX = 8, marginY = 12, gap = 4;
+    var titleH = 10;
+    var cardW = (pageW - marginX * 2 - gap * (cols - 1)) / cols;   // 卡片寬
+    var cardH = cardW * 0.62;                                       // 卡片高（比例）
+    var rowsPerPage = Math.floor((pageH - marginY * 2 - titleH) / (cardH + gap));
+    var perPage = rowsPerPage * cols;
+
+    // 高解析 canvas 尺寸（依 mm→px 放大 4 倍）
+    var pxW = Math.round(cardW * 3.78 * 4), pxH = Math.round(cardH * 3.78 * 4);
+    var className = (APP_STATE.config && APP_STATE.config.className) || "班級";
+
+    students.forEach(function(stu, i) {
+      var posInPage = i % perPage;
+      if (i > 0 && posInPage === 0) pdf.addPage();
+      if (posInPage === 0) {
+        // 頁首標題（jsPDF 內建字型不支援中文，改以 canvas 繪製中文標題避免亂碼）
+        var titleImg = _renderPdfTitleCanvas(className + "　學生登入帳密卡　第 " + (Math.floor(i / perPage) + 1) + " 頁");
+        pdf.addImage(titleImg, "PNG", marginX, marginY - 5, 120, 7);
+      }
+      var col = posInPage % cols, row = Math.floor(posInPage / cols);
+      var x = marginX + col * (cardW + gap);
+      var y = marginY + titleH + row * (cardH + gap);
+      var img = _renderStudentCardCanvas(stu, pxW, pxH);
+      pdf.addImage(img, "PNG", x, y, cardW, cardH);
+    });
+
+    pdf.save(className + "_學生帳密卡.pdf");
+    toast("PDF 已下載（" + students.length + " 位）", "success");
+  } catch (e) {
+    toast("PDF 產生失敗：" + e.message, "error");
+  }
+}
+
 function editStudent(id) {
   const s = id ? APP_STATE.students.find(x => x.id === id) : {};
   showModal(`
