@@ -137,7 +137,7 @@
       '</div>';
   }
 
-  /* 執行抽人動畫 */
+  /* 執行抽人動畫（全螢幕） */
   window.doPick = function () {
     if (SPINNING) return;
     var students = APP_STATE.students || [];
@@ -151,52 +151,75 @@
     }
 
     SPINNING = true;
-    var result = document.getElementById("pickResult");
-    var btn = document.getElementById("btnDoPick");
-    if (btn) { btn.disabled = true; btn.textContent = "抽人中…"; }
 
-    var ticks = 0, maxTicks = 22;
+    // 建立全螢幕抽人動畫覆蓋層
+    var overlay = document.createElement("div");
+    overlay.id = "pickFsOverlay";
+    overlay.className = "tools-pick-fs";
+    overlay.innerHTML =
+      '<div class="tools-pick-fs-inner">' +
+        '<div class="tools-pick-fs-label">🎰 抽人中…</div>' +
+        '<div id="pickFsResult" class="tools-pick-fs-result">' +
+          '<span class="tools-pick-fs-seat">—</span>' +
+          '<span class="tools-pick-fs-name">　</span>' +
+        '</div>' +
+        '<div id="pickFsActions" class="tools-pick-fs-actions" style="visibility:hidden">' +
+          '<button id="pickFsAgain" class="tools-btn-fs-start">🎲 再抽一位</button>' +
+          '<button id="pickFsClose" class="tools-btn-fs-close">✕ 關閉</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var resultEl = document.getElementById("pickFsResult");
+    var labelEl = overlay.querySelector(".tools-pick-fs-label");
+
+    var ticks = 0;
     var shuffleInterval = setInterval(function () {
       var rand = pool[Math.floor(Math.random() * pool.length)];
-      if (result) {
-        result.innerHTML =
-          '<div class="tools-pick-spinning">' +
-            '<span class="tools-pick-seat">' + (rand.seat || "") + '號</span>' +
-            '<span class="tools-pick-name">' + escHtml(rand.name) + '</span>' +
-          '</div>';
-      }
+      resultEl.className = "tools-pick-fs-result tools-pick-fs-spin";
+      resultEl.innerHTML =
+        '<span class="tools-pick-fs-seat">' + (rand.seat || "") + '號</span>' +
+        '<span class="tools-pick-fs-name">' + escHtml(rand.name) + '</span>';
       ticks++;
-      // 後段減速
-      if (ticks > 14) clearInterval(shuffleInterval), void setTimeout(finalize, 60 * (ticks - 14));
-    }, 60);
+      if (ticks > 16) { clearInterval(shuffleInterval); setTimeout(finalize, 70 * (ticks - 16)); }
+    }, 70);
 
     function finalize() {
       var winner = pool[Math.floor(Math.random() * pool.length)];
-      if (result) {
-        result.innerHTML =
-          '<div class="tools-pick-winner">' +
-            '<div class="tools-pick-burst">🎉</div>' +
-            '<span class="tools-pick-seat-big">' + (winner.seat || "") + '號</span>' +
-            '<span class="tools-pick-name-big">' + escHtml(winner.name) + '</span>' +
-          '</div>';
-      }
-      playPickSound();
       if (PICK_NO_REPEAT) PICKED_IDS.push(winner.id);
+      playPickSound();
+      if (labelEl) labelEl.textContent = "🎉 抽中了！";
+      resultEl.className = "tools-pick-fs-result tools-pick-fs-win";
+      resultEl.innerHTML =
+        '<div class="tools-pick-fs-burst">🎉</div>' +
+        '<span class="tools-pick-fs-seat">' + (winner.seat || "") + '號</span>' +
+        '<span class="tools-pick-fs-name">' + escHtml(winner.name) + '</span>';
+
+      var actions = document.getElementById("pickFsActions");
+      if (actions) actions.style.visibility = "visible";
       SPINNING = false;
-      if (btn) { btn.disabled = false; }
-      renderPickerBody();           // 重繪統計與按鈕
-      // 把結果貼回去（renderPickerBody 會清掉）
-      var r2 = document.getElementById("pickResult");
-      if (r2) {
-        r2.innerHTML =
-          '<div class="tools-pick-winner">' +
-            '<div class="tools-pick-burst">🎉</div>' +
-            '<span class="tools-pick-seat-big">' + (winner.seat || "") + '號</span>' +
-            '<span class="tools-pick-name-big">' + escHtml(winner.name) + '</span>' +
-          '</div>';
+
+      var againBtn = document.getElementById("pickFsAgain");
+      var closeBtn = document.getElementById("pickFsClose");
+      // 全部抽完則停用「再抽」
+      var left = PICK_NO_REPEAT ? students.filter(function (s) { return PICKED_IDS.indexOf(s.id) < 0; }).length : students.length;
+      if (againBtn) {
+        if (left === 0) { againBtn.disabled = true; againBtn.textContent = "已全部抽完"; }
+        else againBtn.onclick = function () { closePickFs(); window.doPick(); };
       }
+      if (closeBtn) closeBtn.onclick = closePickFs;
+
+      // 同步更新底層 modal 的統計（若仍開著）
+      if (document.getElementById("pickerBody")) renderPickerBody();
     }
   };
+
+  function closePickFs() {
+    var o = document.getElementById("pickFsOverlay");
+    if (o) o.remove();
+    SPINNING = false;
+  }
+  window.closePickFs = closePickFs;
 
   window.resetPicked = function () {
     PICKED_IDS = [];

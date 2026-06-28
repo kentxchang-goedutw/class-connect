@@ -32,7 +32,7 @@ function adminResources(body) {
         <div class="flex gap-2 shrink-0"><button onclick="editResource('${r.id}')" class="text-blue-600 text-xs underline">編輯</button><button onclick="delResource('${r.id}')" class="text-rose-600 text-xs underline">刪除</button></div>
       </div>`).join("")}</div>`;
   }).join("") : '<p class="text-slate-400 text-sm">尚無資源</p>';
-  body.innerHTML = `<div class="space-y-4"><div class="flex items-center justify-between"><h4 class="font-bold text-sm">學習資源連結（${RES_DATA.length}）</h4><button onclick="editResource()" class="btn3d b-emerald text-xs">＋ 新增連結</button></div>${list}</div>`;
+  body.innerHTML = `<div class="space-y-4">${typeof permBlockHtml === "function" ? permBlockHtml("resources", "資源充電站") : ""}<div class="bg-slate-50 border rounded-xl px-3 py-2 text-xs text-slate-500">➕ 新增資源連結請在主畫面「資源充電站」區塊操作；此處用於編輯／刪除既有連結。</div><h4 class="font-bold text-sm">學習資源連結（${RES_DATA.length}）</h4>${list}</div>`;
 }
 function editResource(id, fromQuick) {
   const r = id ? RES_DATA.find(x => x.id === id) : {};

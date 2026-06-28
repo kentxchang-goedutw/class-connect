@@ -97,41 +97,27 @@ function parseQuizImport(text) {
 }
 /* 後台：小考成績管理 */
 function adminQuiz(body) {
+  // 成績輸入（批次匯入／單筆輸入／AI 提示詞）已移至主畫面「今日小考成績」區塊，後台只保留已發布日期管理。
   const dates = QUIZ_DATES.slice();
   body.innerHTML = `
     <div class="space-y-4">
-      <div class="flex items-center gap-2"><label class="text-sm font-medium">考試日期</label><input type="date" id="qzDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
-      <div>
-        <label class="text-sm font-medium">批次匯入成績</label>
-        <p class="text-xs text-slate-400 mb-1">第一行為<b>標題列</b>（第一欄需為「座號」，最後一欄可放「評語」），其餘每行一位學生，逗號或 Tab 分隔。例：<br><code>座號,國語,數學,評語</code><br><code>1,95,80,繼續加油</code></p>
-        <textarea id="qzImport" class="w-full border rounded-xl p-3 text-xs font-mono" style="min-height:140px" placeholder="座號,國語,數學,評語&#10;1,95,80,繼續加油&#10;2,80,75,多練習&#10;3,缺考,缺考,"></textarea>
+      ${typeof permBlockHtml === "function" ? permBlockHtml("quiz", "今日小考成績") : ""}
+      <div class="bg-slate-50 border rounded-xl px-3 py-2 text-xs text-slate-500">
+        ➕ 發布／輸入成績請在主畫面「今日小考成績」區塊的「➕ 發布成績」按鈕操作（含批次匯入、單筆輸入與 AI 提示詞）；此處用於管理已發布的日期。
       </div>
-      <button id="qzPublish" class="btn3d b-amber w-full">發布此日期成績</button>
-
-      <div class="border-t pt-4 space-y-2">
-        <h4 class="font-bold text-sm">✏️ 單筆輸入／修改</h4>
-        <div class="flex items-center gap-2"><label class="text-sm">日期</label><input type="date" id="qsDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm"></div>
-        <div>
-          <label class="text-sm">科目（逗號分隔，可改）</label>
-          <div class="flex gap-2 mt-1">
-            <input id="qsSubjects" class="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="例：國語,數學">
-            <button id="qsApply" class="btn3d b-amber text-xs whitespace-nowrap">套用科目</button>
-          </div>
-        </div>
-        <div id="qsForm" class="hidden space-y-2"></div>
-      </div>
-
-      <div class="border-t pt-4 bg-indigo-50 -mx-2 px-3 py-3 rounded-xl">
-        <div class="flex items-center justify-between"><h4 class="font-bold text-sm">🤖 AI 成績轉換助手</h4><button id="qzCopyPrompt" class="btn3d b-indigo text-xs">一鍵複製 Prompt</button></div>
-        <p class="text-xs text-slate-500 mt-1">複製後貼給 Gemini，再附上手寫成績單照片／語音輸入／LINE 雜亂文字，AI 會轉成上方格式，貼回匯入框即可一次發布。</p>
-      </div>
-      <div class="border-t pt-4 space-y-1"><h4 class="font-bold text-sm">已發布日期（${dates.length}）</h4>${dates.length ? dates.map(d => `<div class="flex items-center justify-between border rounded-lg p-2 text-sm"><span>${escapeHtml(d)}</span><div class="flex gap-2"><button onclick="loadQuizToImport('${d}')" class="text-blue-600 text-xs underline">載入編輯</button><button onclick="delQuiz('${d}')" class="text-rose-600 text-xs underline">刪除</button></div></div>`).join("") : '<p class="text-slate-400 text-sm">尚無紀錄</p>'}</div>
+      <div class="space-y-1"><h4 class="font-bold text-sm">已發布日期（${dates.length}）</h4>${dates.length ? dates.map(d => `<div class="flex items-center justify-between border rounded-lg p-2 text-sm"><span>${escapeHtml(d)}</span><div class="flex gap-2"><button onclick="quizEditDate('${d}')" class="text-blue-600 text-xs underline">編輯</button><button onclick="delQuiz('${d}')" class="text-rose-600 text-xs underline">刪除</button></div></div>`).join("") : '<p class="text-slate-400 text-sm">尚無紀錄</p>'}</div>
     </div>`;
-  document.getElementById("qzPublish").onclick = () => publishQuiz(false);
-  document.getElementById("qzCopyPrompt").onclick = () => copyText(QUIZ_AI_PROMPT, "已複製 AI 提示詞，快貼給 Gemini！");
-  document.getElementById("qsDate").onchange = loadQsDate;
-  document.getElementById("qsApply").onclick = applyQsSubjects;
-  loadQsDate();
+}
+/* 從後台「編輯」某日期成績：開啟主畫面的發布成績視窗並載入該日期 */
+function quizEditDate(d) {
+  if (typeof closeModal === "function") closeModal();
+  if (typeof quickQuiz === "function") {
+    quickQuiz();
+    setTimeout(function() {
+      var imp = document.getElementById("qzDate"); if (imp) imp.value = d;
+      if (typeof loadQuizToImport === "function") loadQuizToImport(d);
+    }, 50);
+  }
 }
 /* 單筆輸入：載入該日期已存在的科目與成績 */
 async function loadQsDate() {

@@ -421,8 +421,10 @@
   function adminPoints(body) {
     if (!body) return;
     var groups = groupList();
+    var permHtml = (typeof permBlockHtml === "function") ? permBlockHtml("points", "課堂加扣分") : "";
     body.innerHTML =
       '<div class="space-y-6">' +
+        permHtml +
         '<div>' +
           '<div class="flex items-center justify-between mb-2"><h4 class="font-bold text-sm">加扣分行為項目</h4>' +
           '<button onclick="ptAddBehRow()" class="btn3d b-emerald text-xs">＋ 新增一項</button></div>' +

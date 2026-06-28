@@ -449,6 +449,40 @@
   }
   .tools-btn-fs-close:hover { background: rgba(239,68,68,.4); }
 
+  /* ════════ 抽人：全螢幕動畫 ════════ */
+  .tools-pick-fs {
+    position: fixed; inset: 0; z-index: 200;
+    background: linear-gradient(135deg, #1e1b4b, #4c1d95);
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn .2s ease;
+  }
+  .tools-pick-fs-inner { text-align: center; padding: 2rem; width: 100%; max-width: 760px; }
+  .tools-pick-fs-label {
+    font-size: 1.6rem; font-weight: 800; color: #c4b5fd; margin-bottom: 1.5rem;
+    letter-spacing: .08em; text-shadow: 0 0 30px rgba(167,139,250,.5);
+  }
+  .tools-pick-fs-result {
+    display: flex; flex-direction: column; align-items: center; gap: .5rem;
+    min-height: 38vh; justify-content: center;
+  }
+  .tools-pick-fs-seat {
+    font-size: min(9vw, 5rem); font-weight: 800; color: #a5b4fc; line-height: 1;
+    text-shadow: 0 0 40px rgba(129,140,248,.5);
+  }
+  .tools-pick-fs-name {
+    font-size: min(20vw, 13rem); font-weight: 900; color: #fff; line-height: 1;
+    text-shadow: 0 0 70px rgba(196,181,253,.6); word-break: break-all;
+  }
+  .tools-pick-fs-spin { animation: pickSpin .07s linear infinite; opacity: .92; }
+  .tools-pick-fs-spin .tools-pick-fs-name { filter: blur(.5px); }
+  @keyframes pickSpin { 0% { transform: translateY(-6px); } 50% { transform: translateY(6px); } 100% { transform: translateY(-6px); } }
+  .tools-pick-fs-win { animation: pickWin .5s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes pickWin { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+  .tools-pick-fs-win .tools-pick-fs-name { color: #fde68a; text-shadow: 0 0 80px rgba(251,191,36,.8); }
+  .tools-pick-fs-burst { font-size: 4rem; animation: pickBurst .6s ease; }
+  @keyframes pickBurst { 0% { transform: scale(0) rotate(-30deg); } 70% { transform: scale(1.3) rotate(10deg); } 100% { transform: scale(1) rotate(0); } }
+  .tools-pick-fs-actions { display: flex; gap: 1rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap; }
+
   /* ════════ 座位表模組 ════════ */
   .seat-classroom {
     background: linear-gradient(160deg, #f0fdf4, #dcfce7);
@@ -911,26 +945,26 @@
 <div id="toastRoot" class="fixed top-5 right-4 z-[9999] flex flex-col gap-2 items-end pointer-events-none"></div>
 
 <!-- ════════ JS 載入（依賴順序） ════════ -->
-<script src="js/00-local-db.js?v=20260627q"></script>
-<script src="js/01-config-core.js?v=20260627q"></script>
-<script src="js/90-imghost.js?v=20260627q"></script>
-<script src="js/02-app-core.js?v=20260627q"></script>
-<script src="js/03-auth.js?v=20260627q"></script>
-<script src="js/04-utils.js?v=20260627q"></script>
-<script src="js/10-contactbook.js?v=20260627q"></script>
-<script src="js/11-homework.js?v=20260627q"></script>
-<script src="js/12-calendar.js?v=20260627q"></script>
-<script src="js/13-announcements.js?v=20260627q"></script>
-<script src="js/14-slips.js?v=20260627q"></script>
-<script src="js/15-resources.js?v=20260627q"></script>
-<script src="js/16-quiz.js?v=20260627q"></script>
-<script src="js/20-visitor-help-settings.js?v=20260627q"></script>
-<script src="js/30-admin.js?v=20260627q"></script>
-<script src="js/40-quick.js?v=20260627q"></script>
-<script src="js/50-messages.js?v=20260627q"></script>
-<script src="js/60-points.js?v=20260627q"></script>
-<script src="js/70-seating.js?v=20260627q"></script>
-<script src="js/80-tools.js?v=20260627q"></script>
+<script src="js/00-local-db.js?v=20260627s"></script>
+<script src="js/01-config-core.js?v=20260627s"></script>
+<script src="js/90-imghost.js?v=20260627s"></script>
+<script src="js/02-app-core.js?v=20260627s"></script>
+<script src="js/03-auth.js?v=20260627s"></script>
+<script src="js/04-utils.js?v=20260627s"></script>
+<script src="js/10-contactbook.js?v=20260627s"></script>
+<script src="js/11-homework.js?v=20260627s"></script>
+<script src="js/12-calendar.js?v=20260627s"></script>
+<script src="js/13-announcements.js?v=20260627s"></script>
+<script src="js/14-slips.js?v=20260627s"></script>
+<script src="js/15-resources.js?v=20260627s"></script>
+<script src="js/16-quiz.js?v=20260627s"></script>
+<script src="js/20-visitor-help-settings.js?v=20260627s"></script>
+<script src="js/30-admin.js?v=20260627s"></script>
+<script src="js/40-quick.js?v=20260627s"></script>
+<script src="js/50-messages.js?v=20260627s"></script>
+<script src="js/60-points.js?v=20260627s"></script>
+<script src="js/70-seating.js?v=20260627s"></script>
+<script src="js/80-tools.js?v=20260627s"></script>
 
 </body>
 </html>

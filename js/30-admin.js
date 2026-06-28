@@ -35,7 +35,7 @@ function renderAdminTab(i) {
   if (i === 3) adminHomework(body);
   if (i === 4) adminAnnouncements(body);
   if (i === 5) adminCalendar(body);
-  if (i === 6) adminSlips(body);
+  if (i === 6) adminSlips(body, true, true);   // 後台：隱藏建立表單(建立改在主畫面)，但顯示權限設定
   if (i === 7) adminMessages(body);
   if (i === 8) adminResources(body);
   if (i === 9) adminQuiz(body);
@@ -80,6 +80,37 @@ window.saveToolsPerm = function() {
 };
 
 /* ── 後台：班級設定 + 權限矩陣 ── */
+/* ── 各模組分頁頂部：存取權限設定區塊（共用） ──
+   modKey：權限鍵（如 announcements / slips / seating / tools / points …）
+   label：顯示名稱 */
+function permBlockHtml(modKey, label) {
+  const perms = (APP_STATE.config || {}).perms || {};
+  const cur = perms[modKey] || (typeof DEFAULT_PERMS === "object" && DEFAULT_PERMS[modKey]) || "public";
+  return `
+    <div class="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+      <div class="text-sm">
+        <span class="font-medium text-indigo-800">🔑 ${escapeHtml(label || modKey)} 存取權限</span>
+        <span class="text-xs text-slate-500 block">關閉＝主畫面不顯示；公開＝任何人可看；登入＝登入後才看得到</span>
+      </div>
+      <select id="permBlockSel_${modKey}" onchange="savePermBlock('${modKey}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white">
+        <option value="off" ${cur==="off"?"selected":""}>🚫 關閉</option>
+        <option value="public" ${cur==="public"?"selected":""}>🌐 公開瀏覽</option>
+        <option value="login" ${cur==="login"?"selected":""}>🔒 登入瀏覽</option>
+      </select>
+    </div>`;
+}
+window.savePermBlock = async function(modKey, value) {
+  try {
+    await db.collection("classroom").doc("config").set({ perms: { [modKey]: value } }, { merge: true });
+    if (!APP_STATE.config) APP_STATE.config = {};
+    if (!APP_STATE.config.perms) APP_STATE.config.perms = {};
+    APP_STATE.config.perms[modKey] = value;
+    if (typeof applyModuleVisibility === "function") applyModuleVisibility();
+    if (typeof refreshActivePanels === "function") refreshActivePanels();
+    toast("已更新存取權限", "success");
+  } catch (e) { toast("更新失敗：" + e.message, "error"); }
+};
+
 function adminSettings(body) {
   const cfg = APP_STATE.config || {}, perms = cfg.perms || DEFAULT_PERMS;
   body.innerHTML = `
@@ -349,26 +380,20 @@ async function bulkImportStudents() {
 
 /* ── 後台：聯絡簿 ── */
 function adminContactbook(body) {
+  // 聯絡簿的「編輯/發布」已移至教師端主畫面，後台只保留「已讀報表」查詢。
   const date = document.getElementById("cbDate")?.value || todayStr();
   body.innerHTML = `
     <div class="space-y-4">
-      <div class="flex items-center gap-2"><label class="text-sm font-medium">日期</label><input type="date" id="acbDate" value="${date}" class="border rounded-xl px-2 py-1 text-sm" /></div>
-      <div>
-        <label class="text-sm font-medium">聯絡簿內容</label>
-        <p class="text-xs text-slate-400 mb-1">支援 **粗體**、行首 - 清單、自動連結化網址。<b>每一行作業（行首 -）會成為「作業檢核」的欄位。</b></p>
-        <textarea id="acbContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:160px" placeholder="今日作業：&#10;- 國語習作 P.10&#10;- 數學訂正"></textarea>
+      ${permBlockHtml("contactbook", "每日聯絡簿")}
+      <div class="bg-slate-50 border rounded-xl px-3 py-2 text-xs text-slate-500">
+        ✏️ 編輯／發布聯絡簿請在主畫面「每日聯絡簿」區塊操作；此處僅提供「家長已讀報表」查詢。
       </div>
-      <button id="acbSave" class="btn3d b-blue w-full">發布／更新聯絡簿</button>
+      <div class="flex items-center gap-2"><label class="text-sm font-medium">查詢日期</label><input type="date" id="acbDate" value="${date}" class="border rounded-xl px-2 py-1 text-sm" /></div>
       <div class="border-t pt-4"><h4 class="font-bold text-sm mb-2">📊 已讀報表（<span id="acbReportDate">${date}</span>）</h4><div id="acbReport" class="text-sm text-slate-500">載入中…</div></div>
     </div>`;
   const dateEl = document.getElementById("acbDate");
-  const load = () => { const d = dateEl.value; document.getElementById("acbReportDate").textContent = d; db.collection("contactbook").doc(d).get().then(doc => { document.getElementById("acbContent").value = doc.exists ? (doc.data().content || "") : ""; renderReadReport(doc.exists ? (doc.data().reads || {}) : {}); }); };
+  const load = () => { const d = dateEl.value; document.getElementById("acbReportDate").textContent = d; db.collection("contactbook").doc(d).get().then(doc => { renderReadReport(doc.exists ? (doc.data().reads || {}) : {}); }); };
   dateEl.onchange = load; load();
-  document.getElementById("acbSave").onclick = async () => {
-    const d = dateEl.value;
-    try { await db.collection("contactbook").doc(d).set({ content: document.getElementById("acbContent").value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); toast("聯絡簿已發布", "success"); }
-    catch (e) { toast("發布失敗：" + e.message, "error"); }
-  };
 }
 function renderReadReport(reads) {
   const box = document.getElementById("acbReport"); if (!box) return;
@@ -378,53 +403,19 @@ function renderReadReport(reads) {
 /* ── 後台：作業檢核 ── */
 let hwAdminUnsub = null;
 function adminHomework(body) {
+  // 作業檢核的「建立今日檢核」與「點選狀態檢核」已整合到教師端主畫面，後台不再重複呈現。
   body.innerHTML = `
-    <div class="space-y-4">
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="text-sm font-medium">檢核日期</label>
-        <input type="date" id="hwDate" value="${todayStr()}" class="border rounded-xl px-2 py-1 text-sm" />
-        <button id="hwReload" class="btn3d b-amber text-xs">↻ 依前一上課日聯絡簿載入作業</button>
-      </div>
-      <div id="hwSource" class="text-xs text-slate-500"></div>
-      <div class="hw-legend text-xs text-slate-500"><span><i class="hw-dot hw-0"></i>未繳交</span><span><i class="hw-dot hw-1"></i>已繳交</span><span><i class="hw-dot hw-2"></i>待訂正</span><span><i class="hw-dot hw-3"></i>已訂正</span></div>
-      <div id="hwTableBox" class="overflow-x-auto">載入中…</div>
-      <p class="text-xs text-slate-400">點擊欄位循環切換：未繳交 → 已繳交 → 待訂正 → 已訂正。家長登入後可即時看到此表。</p>
+    <div class="space-y-3 text-center py-8">
+      <div class="text-4xl">📝</div>
+      <h4 class="font-bold text-base text-slate-700">作業檢核請在主畫面操作</h4>
+      <p class="text-sm text-slate-500 leading-relaxed">
+        請關閉後台，回到主畫面的「<b>今日作業繳交即時狀況</b>」區塊：<br>
+        ‧ 點「🔄 建立今日檢核」可選擇來源聯絡簿並建立。<br>
+        ‧ 點「✏️ 立即檢核」即可點選每位學生的繳交狀態。<br>
+        ‧ 也可點作業名稱或學生姓名批次改動狀態。
+      </p>
+      <button onclick="closeModal()" class="btn3d b-amber text-sm mt-2">關閉後台，回主畫面操作</button>
     </div>`;
-  const dateEl = document.getElementById("hwDate");
-  const load = async (forceReload) => {
-    if (hwAdminUnsub) hwAdminUnsub();
-    const d = dateEl.value;
-    const doc = await db.collection("homework").doc(d).get();
-    let data = doc.exists ? doc.data() : null;
-    if (forceReload || !data || !(data.items || []).length) {
-      let prev;
-      try { prev = await findPrevContactbook(d); }
-      catch (err) { if (err.message === "__INDEX__") return; toast("讀取失敗：" + err.message, "error"); return; }
-      const items = prev ? extractHomework(prev.content) : [];
-      const payload = { sourceDate: prev ? prev.date : null, items, status: (data && data.status) || {} };
-      await db.collection("homework").doc(d).set({ sourceDate: payload.sourceDate, items: payload.items }, { merge: true });
-      if (!prev) toast("查無前一上課日的聯絡簿內容，請先在「聯絡簿」分頁發布內容。", "warn");
-    }
-    hwAdminUnsub = db.collection("homework").doc(d).onSnapshot(s => renderHwAdminTable(d, s.exists ? s.data() : { items: [], status: {} }));
-  };
-  dateEl.onchange = () => load(false);
-  document.getElementById("hwReload").onclick = () => load(true);
-  load(false);
-}
-function renderHwAdminTable(date, data) {
-  const box = document.getElementById("hwTableBox"); if (!box) return;
-  const items = data.items || [], status = data.status || {}, src = document.getElementById("hwSource");
-  if (src) src.innerHTML = data.sourceDate ? `作業來源：<b>${escapeHtml(data.sourceDate)}</b> 聯絡簿（共 ${items.length} 項作業）` : '<span class="text-rose-500">查無前一上課日的聯絡簿，請點上方「↻ 載入」或先發布聯絡簿。</span>';
-  if (!items.length) { box.innerHTML = '<p class="text-slate-400 text-sm py-4">沒有可檢核的作業項目（聯絡簿請以「- 」開頭逐項列出作業）。</p>'; return; }
-  if (!APP_STATE.students.length) { box.innerHTML = '<p class="text-slate-400 text-sm py-4">尚無學生名單。</p>'; return; }
-  let html = '<table class="hw-table text-sm"><thead><tr><th class="hw-th-seat">座號</th>' + items.map(it => `<th class="hw-th">${escapeHtml(it)}</th>`).join("") + "</tr></thead><tbody>";
-  APP_STATE.students.forEach(st => {
-    html += `<tr><td class="hw-td-seat">${escapeHtml(st.seat)} ${escapeHtml(st.hideName?"":(st.name||""))}</td>`;
-    items.forEach((it, idx) => { const key = st.seat + "_" + idx, cur = status[key] || 0; html += `<td><button class="hw-cell hw-clickable hw-${cur}" onclick="cycleHw('${date}','${escapeHtml(String(st.seat))}',${idx},${cur})">${HW_STATES[cur].label}</button></td>`; });
-    html += "</tr>";
-  });
-  html += "</tbody></table>";
-  box.innerHTML = html;
 }
 async function cycleHw(date, seat, idx, cur) {
   const next = (Number(cur) + 1) % 4;
@@ -470,20 +461,14 @@ function adminAnnouncements(body) {
     </div>`;
   }).join("");
 
+  // 新增公告請在主畫面「公告與榮譽榜」區塊操作；後台只保留現有公告的管理與自動刪除設定。
   body.innerHTML = `
     <div class="space-y-4">
-      <h4 class="font-bold text-sm">新增公告</h4>
-      <input id="annTitle" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="公告標題" />
-      <textarea id="annContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:100px" placeholder="內文（可貼網址自動連結、**粗體**）"></textarea>
-      <div><label class="text-sm font-medium block mb-1">附加圖片（自動壓縮）</label><input id="annImgs" type="file" accept="image/*" multiple class="text-sm" /><div id="annPreview" class="flex flex-wrap gap-2 mt-2"></div></div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="text-sm shrink-0">⏱️ 此則自動刪除日期</label>
-        <input id="annExpire" type="date" class="border rounded-xl px-2 py-1 text-sm" />
-        <span class="text-xs text-slate-400">留空＝${autoDays ? '套用全域 '+autoDays+' 天' : '不自動刪除'}</span>
+      ${permBlockHtml("announcements", "公告與榮譽榜")}
+      <div class="bg-slate-50 border rounded-xl px-3 py-2 text-xs text-slate-500">
+        ➕ 發布新公告請在主畫面「公告與榮譽榜」區塊的「➕ 新增公告」按鈕操作；此處用於管理現有公告（隱藏／刪除／自動刪除設定）。
       </div>
-      <button id="annSave" class="btn3d b-rose w-full">發布公告</button>
-
-      <div class="border-t pt-4 space-y-3">
+      <div class="space-y-3">
         <div class="flex items-center justify-between flex-wrap gap-2">
           <h4 class="font-bold text-sm">現有公告（${ANN_DATA.length} 則）</h4>
           <div class="flex gap-2 flex-wrap">
@@ -496,32 +481,6 @@ function adminAnnouncements(body) {
         <div class="space-y-2">${list || '<p class="text-slate-400 text-sm">尚無公告</p>'}</div>
       </div>
     </div>`;
-
-  let pendingImgs = [];
-  document.getElementById("annImgs").onchange = async (e) => {
-    pendingImgs = [];
-    const prev = document.getElementById("annPreview");
-    prev.innerHTML = '<span class="text-xs text-slate-400">壓縮中…</span>';
-    for (const f of e.target.files) pendingImgs.push(await compressImage(f));
-    prev.innerHTML = pendingImgs.map(s => `<img src="${s}" class="w-16 h-16 object-cover rounded" />`).join("");
-  };
-  document.getElementById("annSave").onclick = async () => {
-    const title = document.getElementById("annTitle").value.trim();
-    if (!title) { toast("請輸入標題", "warn"); return; }
-    try {
-      const expVal = document.getElementById("annExpire").value;
-      await db.collection("announcements").add({
-        title,
-        content: document.getElementById("annContent").value,
-        images: pendingImgs,
-        hidden: false,
-        expireAt: expVal || "",   // 每則獨立到期日（YYYY-MM-DD），留空＝套用全域設定
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      toast("公告已發布", "success"); openAdmin(); adminGoTab(4);
-    }
-    catch (e) { toast("發布失敗：" + e.message, "error"); }
-  };
 }
 
 window.annSelectAll = function() {
@@ -689,12 +648,11 @@ function adminCalendar(body) {
     <div class="border rounded-xl p-2 flex items-center justify-between gap-2 text-sm"><div class="min-w-0"><span class="text-violet-600 text-xs">${escapeHtml(normDate(e.date))}</span> <span class="font-medium">${escapeHtml(e.title||"")}</span></div><button onclick="delEvent('${e.id}')" class="text-rose-600 text-xs underline shrink-0">刪除</button></div>`).join("");
   body.innerHTML = `
     <div class="space-y-4">
-      <h4 class="font-bold text-sm">新增單筆活動</h4>
-      <div class="grid grid-cols-2 gap-2"><input id="evDate" type="date" class="border rounded-xl px-2 py-2 text-sm" /><input id="evTitle" class="border rounded-xl px-3 py-2 text-sm" placeholder="活動名稱" /></div>
-      <textarea id="evDesc" class="w-full border rounded-xl p-2 text-sm" placeholder="詳細描述（選填）"></textarea>
-      <input id="evUrl" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="超連結 URL（選填）" />
-      <button id="evSave" class="btn3d b-blue w-full text-sm">新增活動</button>
-      <div class="border-t pt-4 space-y-2">
+      ${permBlockHtml("calendar", "班級日曆")}
+      <div class="bg-slate-50 border rounded-xl px-3 py-2 text-xs text-slate-500">
+        ➕ 新增單筆活動請在主畫面「班級日曆」區塊操作；後台保留「批次匯入」與「活動管理」。
+      </div>
+      <div class="space-y-2">
         <h4 class="font-bold text-sm">📋 批次文字匯入活動</h4>
         <p class="text-xs text-slate-500">每行一活動：<code>年/月/日,活動名稱,詳細描述,超連結(選填)</code>，逗號或 Tab 分隔。</p>
         <textarea id="bulkEv" class="w-full border rounded-xl p-2 text-xs font-mono" style="min-height:110px" placeholder="2026/09/15,第一次定期評量,請準備國數複習,https://school.edu.tw/exam&#10;2026/09/28	教師節活動	請穿運動服8:10操場集合	"></textarea>
@@ -706,12 +664,6 @@ function adminCalendar(body) {
       </div>
       <div class="border-t pt-4 space-y-1"><h4 class="font-bold text-sm">現有活動（${APP_STATE.calEvents.length}）</h4>${list || '<p class="text-slate-400 text-sm">尚無活動</p>'}</div>
     </div>`;
-  document.getElementById("evSave").onclick = async () => {
-    const d = document.getElementById("evDate").value, t = document.getElementById("evTitle").value.trim();
-    if (!d || !t) { toast("請填日期與名稱", "warn"); return; }
-    try { await db.collection("calendar").add({ date: normDate(d), title: t, desc: document.getElementById("evDesc").value, url: document.getElementById("evUrl").value.trim() }); toast("已新增活動","success"); openAdmin(); adminGoTab(5); }
-    catch (e) { toast("失敗：" + e.message, "error"); }
-  };
   document.getElementById("doBulkEv").onclick = bulkImportEvents;
   document.getElementById("copyPrompt").onclick = () => copyText(AI_PROMPT, "已複製 AI 提示詞，快貼給 Gemini 試試！");
 }
@@ -735,7 +687,7 @@ async function bulkImportEvents() {
 async function delEvent(id) { if (!await confirmDialog("刪除活動","確定刪除？",{okText:"刪除",danger:true})) return; await db.collection("calendar").doc(id).delete(); toast("已刪除","info"); openAdmin(); adminGoTab(5); }
 
 /* ── 後台：回條 ──（hideCreate=true 時隱藏「建立回條項目」表單，供前台嵌入用） ── */
-function adminSlips(body, hideCreate) {
+function adminSlips(body, hideCreate, showPerm) {
   const autoDays = (APP_STATE.config || {}).slipAutoDel || 0;
   const list = SLIP_DATA.map(s => {
     const subs = SUB_DATA.filter(x => x.slipId === s.id);
@@ -801,8 +753,9 @@ function adminSlips(body, hideCreate) {
 
   body.innerHTML = `
     <div class="space-y-4">
+      ${showPerm ? permBlockHtml("slips", "回條拍照回傳") : ""}
       ${createForm}
-      <div class="${hideCreate ? '' : 'border-t pt-4 '}space-y-3">
+      <div class="${(hideCreate && !showPerm) ? '' : 'border-t pt-4 '}space-y-3">
         <div class="flex items-center justify-between flex-wrap gap-2">
           <h4 class="font-bold text-sm">回條進度（${SLIP_DATA.length} 筆）</h4>
           <div class="flex gap-2 flex-wrap">

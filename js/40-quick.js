@@ -126,6 +126,7 @@ function quickAnnouncement() {
       <input id="qannTitle" class="w-full border rounded-xl px-3 py-2 text-sm" placeholder="公告標題">
       <textarea id="qannContent" class="w-full border rounded-xl p-3 text-sm" style="min-height:100px" placeholder="內文（可貼網址自動連結、**粗體**）"></textarea>
       <div><label class="text-sm font-medium block mb-1">附加圖片（自動壓縮）</label><input id="qannImgs" type="file" accept="image/*" multiple class="text-sm"><div id="qannPrev" class="flex flex-wrap gap-2 mt-2"></div></div>
+      <div class="flex items-center gap-2 flex-wrap"><label class="text-sm shrink-0">⏱️ 自動刪除日期</label><input id="qannExpire" type="date" class="border rounded-xl px-2 py-1 text-sm"><span class="text-xs text-slate-400">留空＝不自動刪除</span></div>
       <button id="qannSave" class="btn3d b-rose w-full">發布公告</button>
     </div>`, { size: "max-w-md" });
   document.getElementById("qannImgs").onchange = async (e) => {
@@ -136,7 +137,7 @@ function quickAnnouncement() {
   document.getElementById("qannSave").onclick = async () => {
     const title = document.getElementById("qannTitle").value.trim();
     if (!title) { toast("請輸入標題", "warn"); return; }
-    try { await db.collection("announcements").add({ title, content: document.getElementById("qannContent").value, images: imgs, hidden: false, createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("公告已發布", "success"); closeModal(); }
+    try { await db.collection("announcements").add({ title, content: document.getElementById("qannContent").value, images: imgs, hidden: false, expireAt: document.getElementById("qannExpire").value || "", createdAt: firebase.firestore.FieldValue.serverTimestamp() }); toast("公告已發布", "success"); closeModal(); }
     catch (e) { toast("發布失敗：" + e.message, "error"); }
   };
 }

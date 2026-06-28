@@ -718,26 +718,20 @@
 
   /* ── 10. 後台管理（adminSeating） ── */
   function adminSeating(body) {
-    var s = SEATING || DEFAULT_SEATING;
-    body.innerHTML = '<div class="space-y-4">' +
-      '<p class="text-sm text-slate-500">在此設定座位表模式；也可直接從主畫面「✏️ 編輯座位表」按鈕進行拖曳排列。</p>' +
-      '<div class="flex flex-wrap gap-4 items-center">' +
-        '<label class="text-sm font-medium flex items-center gap-2 cursor-pointer">' +
-          '<input type="radio" name="adminSeatMode" value="rows" ' + (s.mode !== "free" ? "checked" : "") + ' class="accent-indigo-600"> 按列排座位' +
-        '</label>' +
-        '<label class="text-sm font-medium flex items-center gap-2 cursor-pointer">' +
-          '<input type="radio" name="adminSeatMode" value="free" ' + (s.mode === "free" ? "checked" : "") + ' class="accent-indigo-600"> 自由排列' +
-        '</label>' +
-        '<label class="text-sm text-slate-600 flex items-center gap-1">列數 <input type="number" id="adminSeatRows" value="' + (s.rows||6) + '" min="1" max="12" class="w-14 border rounded-lg px-2 py-1 text-sm ml-1"></label>' +
-        '<label class="text-sm text-slate-600 flex items-center gap-1">欄數 <input type="number" id="adminSeatCols" value="' + (s.cols||8) + '" min="1" max="12" class="w-14 border rounded-lg px-2 py-1 text-sm ml-1"></label>' +
-      '</div>' +
-      '<div class="flex gap-3 flex-wrap">' +
-        '<button onclick="adminSeatSave()" class="btn3d b-indigo text-sm">💾 儲存模式設定</button>' +
-        '<button onclick="adminSeatAutoFill()" class="btn3d b-blue text-sm">🔀 自動排入學生</button>' +
-        '<button onclick="adminSeatClear()" class="btn3d b-rose text-sm">🗑️ 清空座位表</button>' +
-      '</div>' +
-      '<p class="text-xs text-slate-400">拖曳調整位置請從主畫面「✏️ 編輯座位表」進行。</p>' +
-    '</div>';
+    var permHtml = (typeof permBlockHtml === "function") ? permBlockHtml("seating", "班級座位表") : "";
+    body.innerHTML =
+      '<div class="space-y-4">' +
+        permHtml +
+        '<div class="space-y-3 text-center py-8">' +
+          '<div class="text-4xl">🪑</div>' +
+          '<h4 class="font-bold text-base text-slate-700">座位表請在主畫面操作</h4>' +
+          '<p class="text-sm text-slate-500 leading-relaxed">' +
+            '請關閉後台，回到主畫面的「<b>班級座位表</b>」區塊，點「<b>✏️ 編輯座位表</b>」即可：<br>' +
+            '設定按列／自由模式、行列數、自動排入學生、拖曳調整位置、切換教師視角、匯出 PDF。' +
+          '</p>' +
+          '<button onclick="closeModal()" class="btn3d b-emerald text-sm mt-2">關閉後台，回主畫面操作</button>' +
+        '</div>' +
+      '</div>';
   }
 
   window.adminSeatSave = function() {
