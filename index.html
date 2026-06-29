@@ -304,6 +304,8 @@
   .tools-card-btn .tc-sub { font-size: .72rem; color: #6d28d9; font-weight: 600; }
   .tools-btn-picker { background: linear-gradient(145deg, #ede9fe, #ddd6fe); }
   .tools-btn-timer  { background: linear-gradient(145deg, #e0f2fe, #bae6fd); }
+  .tools-btn-countdown { background: linear-gradient(145deg, #fef9c3, #fde68a); }
+  .tools-btn-countdown .tc-sub { color: #b45309; }
 
   /* ── 抽人 ── */
   .tools-pick-result {
@@ -482,6 +484,230 @@
   .tools-pick-fs-burst { font-size: 4rem; animation: pickBurst .6s ease; }
   @keyframes pickBurst { 0% { transform: scale(0) rotate(-30deg); } 70% { transform: scale(1.3) rotate(10deg); } 100% { transform: scale(1) rotate(0); } }
   .tools-pick-fs-actions { display: flex; gap: 1rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap; }
+
+  /* ════════ 活動倒數便利貼 ════════ */
+  /* 浮動容器：覆蓋整個視窗，便利貼於其中絕對定位；本身不攔截點擊 */
+  #cdNotesLayer {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    overflow: visible;
+  }
+  /* 單張便利貼 */
+  .cd-note {
+    pointer-events: auto;
+    position: absolute;
+    border-radius: 4px 14px 14px 14px;
+    padding: 16px 18px 14px;
+    color: #3b2f12;
+    box-shadow: 0 10px 22px rgba(0,0,0,.18), 0 2px 4px rgba(0,0,0,.12);
+    transform: rotate(-1.6deg);
+    transition: transform .18s ease, box-shadow .18s ease;
+    font-family: "Noto Sans TC", system-ui, sans-serif;
+    background: linear-gradient(160deg, #fff6a8 0%, #ffe566 100%);
+    border: 1px solid rgba(0,0,0,.04);
+  }
+  .cd-note:nth-child(even) { transform: rotate(1.8deg); }
+  .cd-note:hover { transform: rotate(0deg) scale(1.03); box-shadow: 0 16px 30px rgba(0,0,0,.24); }
+  /* 撕貼膠帶效果 */
+  .cd-note::before {
+    content: "";
+    position: absolute;
+    top: -10px; left: 50%;
+    width: 64px; height: 20px;
+    transform: translateX(-50%) rotate(-3deg);
+    background: rgba(255,255,255,.55);
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    border-radius: 2px;
+  }
+  /* 配色變化（依索引循環） */
+  .cd-note.cd-c1 { background: linear-gradient(160deg,#fff6a8,#ffe566); }
+  .cd-note.cd-c2 { background: linear-gradient(160deg,#ffd6e7,#ffafcc); color:#5a2a3c; }
+  .cd-note.cd-c3 { background: linear-gradient(160deg,#c8f4d8,#86efac); color:#14532d; }
+  .cd-note.cd-c4 { background: linear-gradient(160deg,#cfe4ff,#93c5fd); color:#1e3a5f; }
+  .cd-note.cd-c5 { background: linear-gradient(160deg,#e7d6ff,#c4b5fd); color:#3b256e; }
+
+  .cd-note-name {
+    font-weight: 900;
+    line-height: 1.15;
+    word-break: break-word;
+    margin-bottom: 4px;
+    letter-spacing: .5px;
+  }
+  .cd-note-count {
+    display: flex; align-items: baseline; gap: 4px;
+    font-weight: 800;
+  }
+  .cd-note-num { font-weight: 900; line-height: 1; }
+  .cd-note-unit { font-size: .8em; opacity: .8; }
+  .cd-note-date { font-size: .72em; opacity: .65; margin-top: 6px; font-weight: 600; }
+  .cd-note-zero .cd-note-num { color: #dc2626; animation: cdPulse 1s ease-in-out infinite; }
+  @keyframes cdPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+  .cd-note-past { opacity: .82; }
+  .cd-note-past .cd-note-num { color:#16a34a; }
+
+  /* 尺寸：小 / 中 / 大 */
+  .cd-note.cd-sm { width: 140px; }
+  .cd-note.cd-sm .cd-note-name { font-size: .95rem; }
+  .cd-note.cd-sm .cd-note-num { font-size: 2.4rem; }
+  .cd-note.cd-md { width: 188px; }
+  .cd-note.cd-md .cd-note-name { font-size: 1.2rem; }
+  .cd-note.cd-md .cd-note-num { font-size: 3.6rem; }
+  .cd-note.cd-lg { width: 248px; }
+  .cd-note.cd-lg .cd-note-name { font-size: 1.55rem; }
+  .cd-note.cd-lg .cd-note-num { font-size: 5rem; }
+
+  /* 便利貼上的小按鈕（放大 / 關閉） */
+  .cd-note-tools {
+    position: absolute;
+    top: 6px; right: 8px;
+    display: flex; gap: 4px;
+    opacity: 0; transition: opacity .15s;
+  }
+  .cd-note:hover .cd-note-tools { opacity: 1; }
+  .cd-note-btn {
+    width: 24px; height: 24px;
+    border: none; border-radius: 7px;
+    background: rgba(0,0,0,.12);
+    color: inherit; cursor: pointer;
+    font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, transform .1s;
+  }
+  .cd-note-btn:hover { background: rgba(0,0,0,.28); color:#fff; }
+  .cd-note-btn:active { transform: scale(.9); }
+
+  /* 拖曳把手（僅老師可見）與拖曳狀態 */
+  .cd-note-drag {
+    position: absolute;
+    left: 8px; bottom: 6px;
+    font-size: 14px; line-height: 1;
+    color: rgba(0,0,0,.32);
+    cursor: grab;
+    user-select: none;
+    padding: 2px 4px;
+  }
+  .cd-note.cd-draggable { cursor: grab; }
+  .cd-note.cd-draggable:hover .cd-note-drag { color: rgba(0,0,0,.55); }
+  .cd-note.cd-dragging {
+    cursor: grabbing !important;
+    transform: rotate(0deg) scale(1.05) !important;
+    box-shadow: 0 22px 40px rgba(0,0,0,.3) !important;
+    z-index: 80;
+    opacity: .96;
+    transition: none !important;
+  }
+  .cd-note.cd-dragging .cd-note-drag { cursor: grabbing; }
+
+  /* 最小化膠囊列：固定在底部置中，獨立一條，不會擋住模組內容 */
+  #cdMinBar {
+    position: fixed;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    z-index: 61;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 96vw;
+    pointer-events: none;
+  }
+  .cd-cap {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    border-radius: 999px;
+    padding: 5px 12px 5px 14px;
+    font-family: "Noto Sans TC", system-ui, sans-serif;
+    font-weight: 800;
+    color: #3b2f12;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    transition: transform .12s ease, box-shadow .12s ease;
+    max-width: 46vw;
+  }
+  .cd-cap:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,.26); }
+  .cd-cap:active { transform: scale(.96); }
+  .cd-cap-name {
+    font-size: .82rem;
+    max-width: 9rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cd-cap-num {
+    font-size: 1rem; font-weight: 900;
+    background: rgba(0,0,0,.12);
+    border-radius: 999px;
+    padding: 1px 9px;
+    min-width: 1.6rem; text-align: center;
+  }
+  .cd-cap.cd-cap-zero .cd-cap-num { background: #dc2626; color: #fff; }
+  .cd-cap.cd-cap-past .cd-cap-num { background: #16a34a; color: #fff; }
+  /* 膠囊沿用便利貼配色 */
+  .cd-cap.cd-c1 { background: #ffe566; }
+  .cd-cap.cd-c2 { background: #ffafcc; color:#5a2a3c; }
+  .cd-cap.cd-c3 { background: #86efac; color:#14532d; }
+  .cd-cap.cd-c4 { background: #93c5fd; color:#1e3a5f; }
+  .cd-cap.cd-c5 { background: #c4b5fd; color:#3b256e; }
+
+  /* 手機：便利貼自動位置往上提，避免壓到底部膠囊列；大尺寸便利貼自動縮小一級 */
+  @media (max-width: 640px) {
+    .cd-note.cd-note-auto { bottom: 58px !important; right: 10px !important; }
+    .cd-note.cd-lg { width: 200px; }
+    .cd-note.cd-lg .cd-note-num { font-size: 3.8rem; }
+    #cdMinBar { bottom: 8px; }
+  }
+
+  /* 全螢幕倒數 */
+  .cd-fs {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 35%, #1e293b 0%, #0b1120 70%);
+    animation: cdFade .25s ease;
+  }
+  @keyframes cdFade { from{opacity:0} to{opacity:1} }
+  .cd-fs-inner { text-align: center; padding: 2rem; max-width: 92vw; }
+  .cd-fs-name {
+    font-size: clamp(2rem, 8vw, 5.5rem);
+    font-weight: 900; color: #fff; letter-spacing: 2px;
+    margin-bottom: 1.2rem; word-break: break-word;
+    text-shadow: 0 4px 30px rgba(99,102,241,.5);
+  }
+  .cd-fs-num {
+    font-size: clamp(7rem, 34vw, 24rem);
+    font-weight: 900; line-height: .9;
+    background: linear-gradient(180deg,#fde68a,#f59e0b);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 10px 40px rgba(245,158,11,.45));
+    animation: cdPop .5s cubic-bezier(.2,1.5,.4,1);
+  }
+  @keyframes cdPop { from{transform:scale(.6);opacity:0} to{transform:scale(1);opacity:1} }
+  .cd-fs-num.cd-zero { background: linear-gradient(180deg,#fca5a5,#dc2626); -webkit-background-clip:text; background-clip:text; }
+  .cd-fs-num.cd-past { background: linear-gradient(180deg,#86efac,#16a34a); -webkit-background-clip:text; background-clip:text; }
+  .cd-fs-unit { font-size: clamp(1.5rem,5vw,3rem); color:#cbd5e1; font-weight:700; margin-top:.5rem; }
+  .cd-fs-date { font-size: clamp(1rem,3vw,1.5rem); color:#94a3b8; margin-top:1rem; }
+  .cd-fs-close {
+    position: absolute; top: 24px; right: 28px;
+    width: 48px; height: 48px; border-radius: 50%;
+    border: none; background: rgba(255,255,255,.12); color:#fff;
+    font-size: 24px; cursor: pointer; transition: background .15s;
+  }
+  .cd-fs-close:hover { background: rgba(255,255,255,.28); }
+
+  /* 設定視窗中的活動列表 */
+  .cd-act-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border:1px solid #e2e8f0; border-radius: 12px;
+    background:#fff; margin-bottom: 8px;
+  }
+  .cd-act-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .cd-size-seg { display:inline-flex; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; }
+  .cd-size-seg button { padding:3px 9px; font-size:12px; background:#fff; border:none; cursor:pointer; color:#64748b; }
+  .cd-size-seg button.on { background:#6366f1; color:#fff; }
 
   /* ════════ 座位表模組 ════════ */
   .seat-classroom {
@@ -867,7 +1093,7 @@
       <div class="card-body">
         <div id="toolsLocked" class="locked-msg hidden">🔒 此區需登入後使用。</div>
         <div id="toolsContent" class="hidden">
-          <div class="flex gap-4">
+          <div class="flex gap-4 flex-wrap">
             <!-- 抽人 -->
             <button onclick="openPicker()" class="tools-card-btn tools-btn-picker">
               <span class="tc-icon">🎰</span>
@@ -879,6 +1105,12 @@
               <span class="tc-icon">⏱️</span>
               <span class="tc-label">倒數計時器</span>
               <span class="tc-sub">支援全螢幕顯示</span>
+            </button>
+            <!-- 活動倒數 -->
+            <button onclick="openCountdown()" class="tools-card-btn tools-btn-countdown">
+              <span class="tc-icon">📌</span>
+              <span class="tc-label">活動倒數</span>
+              <span class="tc-sub">便利貼浮動顯示</span>
             </button>
           </div>
         </div>

@@ -35,10 +35,13 @@
   function setupTools() {
     registerModule();
     renderTools();
+    cdSubscribe();   // 訂閱活動倒數資料庫，便利貼即時同步
   }
 
   /* ── 5. 主畫面渲染 ── */
   function renderTools() {
+    // 便利貼為全班顯示，不受課堂小工具權限影響；登入狀態改變時也重繪以更新拖曳權限
+    try { renderCdNotes(); } catch (e) {}
     var section = document.querySelector('[data-module="tools"]');
     if (!section) return;
 
@@ -555,8 +558,398 @@
     return true;
   }
 
+  /* ══════════════════════════════════════════
+     活動倒數便利貼
+  ══════════════════════════════════════════ */
+
+  /* 活動資料與位置存於班級資料庫：classroom/countdown 文件。
+     結構：{ activities: [{ id, name, date:"YYYY-MM-DD", size, enabled, x, y }] }
+       x,y = 便利貼左上角座標(px)，由老師拖曳後寫入，家長跨裝置同步可見。
+       未設定 x,y 時 → 預設右下角自動堆疊。
+     最小化狀態屬「個人檢視偏好」，存在各自瀏覽器 localStorage，不寫入資料庫。 */
+
+  var CD_ACTS = [];          // 由 onSnapshot 同步的活動陣列
+  var CD_SUBSCRIBED = false; // 避免重複訂閱
+
+  function cdLoad() { return CD_ACTS.slice(); }
+
+  /* 寫回資料庫（限老師會呼叫；其餘人不應觸發） */
+  function cdSave(list) {
+    CD_ACTS = list;
+    try {
+      if (typeof db !== "undefined" && db.collection) {
+        db.collection("classroom").doc("countdown").set({ activities: list }, { merge: true });
+      }
+    } catch (e) { console.warn("倒數活動儲存失敗", e); }
+  }
+
+  /* 訂閱資料庫變動，任何裝置都即時更新便利貼 */
+  function cdSubscribe() {
+    if (CD_SUBSCRIBED) return;
+    if (typeof db === "undefined" || !db.collection) return;
+    CD_SUBSCRIBED = true;
+    db.collection("classroom").doc("countdown").onSnapshot(function (doc) {
+      var data = doc && doc.exists ? doc.data() : null;
+      CD_ACTS = (data && Array.isArray(data.activities)) ? data.activities : [];
+      renderCdNotes();
+      if (document.getElementById("cdSettingsBody")) renderCdSettingsBody();
+    }, function (err) { console.warn("倒數活動監聽失敗", err); });
+  }
+
+  function cdGenId() { return "cd" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  /* ── 最小化狀態（個人本機偏好） ── */
+  function cdMinKey() {
+    var cls = "";
+    try { if (window.LocalDB && LocalDB.getActiveClassId) cls = LocalDB.getActiveClassId() || ""; } catch (e) {}
+    return "TOOLS_cd_min_" + (cls || "default");
+  }
+  function cdGetMinned() {
+    try { return JSON.parse(localStorage.getItem(cdMinKey()) || "[]"); } catch (e) { return []; }
+  }
+  function cdSetMinned(arr) {
+    try { localStorage.setItem(cdMinKey(), JSON.stringify(arr)); } catch (e) {}
+  }
+  function cdIsMin(id) { return cdGetMinned().indexOf(id) >= 0; }
+  window.cdToggleMin = function (id) {
+    var arr = cdGetMinned();
+    var i = arr.indexOf(id);
+    if (i >= 0) arr.splice(i, 1); else arr.push(id);
+    cdSetMinned(arr);
+    renderCdNotes();
+  };
+
+  /* 計算倒數天數：以「日」為單位，忽略時分秒。
+     今天 6/29、活動 7/1 → 2；當天 → 0；已過 → 負值 */
+  function cdDaysLeft(dateStr) {
+    if (!dateStr) return null;
+    var parts = dateStr.split("-");
+    if (parts.length !== 3) return null;
+    var target = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    target.setHours(0, 0, 0, 0);
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var diffMs = target.getTime() - today.getTime();
+    return Math.round(diffMs / 86400000);
+  }
+
+  function cdSizeClass(sz) {
+    return sz === "sm" ? "cd-sm" : sz === "lg" ? "cd-lg" : "cd-md";
+  }
+
+  /* 打開設定視窗（限老師） */
+  window.openCountdown = function () {
+    if (!checkTeacher()) return;
+    showModal(buildCountdownHtml(), { size: "max-w-lg", noBackdropClose: false });
+    renderCdSettingsBody();
+  };
+
+  function buildCountdownHtml() {
+    return '<div class="flex flex-col" style="max-height:90vh">' +
+      '<div class="px-6 py-4 border-b flex items-center justify-between shrink-0">' +
+        '<h3 class="text-lg font-bold flex items-center gap-2">📌 活動日程倒數</h3>' +
+        '<button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>' +
+      '</div>' +
+      '<div class="px-6 py-4 border-b shrink-0 space-y-3">' +
+        '<div class="text-xs font-bold text-slate-500">新增活動</div>' +
+        '<div class="flex flex-wrap items-end gap-2">' +
+          '<div class="flex flex-col gap-1">' +
+            '<label class="text-[11px] text-slate-400">活動名稱</label>' +
+            '<input id="cdNewName" type="text" maxlength="20" placeholder="例如：期末考" class="border rounded-xl px-3 py-1.5 text-sm w-40">' +
+          '</div>' +
+          '<div class="flex flex-col gap-1">' +
+            '<label class="text-[11px] text-slate-400">活動日期</label>' +
+            '<input id="cdNewDate" type="date" class="border rounded-xl px-3 py-1.5 text-sm">' +
+          '</div>' +
+          '<button onclick="cdAddActivity()" class="btn3d b-violet text-xs">＋ 新增</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="cdSettingsBody" class="flex-1 overflow-y-auto px-6 py-4"></div>' +
+    '</div>';
+  }
+
+  window.cdAddActivity = function () {
+    var name = (document.getElementById("cdNewName").value || "").trim();
+    var date = document.getElementById("cdNewDate").value;
+    if (!name) { toast("請輸入活動名稱", "warn"); return; }
+    if (!date) { toast("請選擇活動日期", "warn"); return; }
+    var list = cdLoad();
+    list.push({ id: cdGenId(), name: name, date: date, size: "md", enabled: true });
+    cdSave(list);
+    document.getElementById("cdNewName").value = "";
+    document.getElementById("cdNewDate").value = "";
+    renderCdSettingsBody();
+    renderCdNotes();
+    toast("已新增活動", "success");
+  };
+
+  function renderCdSettingsBody() {
+    var body = document.getElementById("cdSettingsBody");
+    if (!body) return;
+    var list = cdLoad();
+    if (!list.length) {
+      body.innerHTML = '<div class="text-center text-slate-400 text-sm py-8">尚未設定任何活動<br>請於上方新增。</div>';
+      return;
+    }
+    // 依日期排序
+    list.sort(function (a, b) { return (a.date || "").localeCompare(b.date || ""); });
+    var colors = ["#f59e0b", "#ec4899", "#22c55e", "#3b82f6", "#8b5cf6"];
+    body.innerHTML = list.map(function (a, i) {
+      var d = cdDaysLeft(a.date);
+      var dTxt = d === null ? "—" : d > 0 ? "倒數 " + d + " 天" : d === 0 ? "就是今天！" : "已過 " + (-d) + " 天";
+      return '<div class="cd-act-row">' +
+        '<span class="cd-act-dot" style="background:' + colors[i % colors.length] + '"></span>' +
+        '<div class="flex-1 min-w-0">' +
+          '<div class="font-bold text-sm truncate">' + escHtml(a.name) + '</div>' +
+          '<div class="text-[11px] text-slate-400">' + escHtml(a.date) + ' · ' + dTxt + '</div>' +
+        '</div>' +
+        '<div class="cd-size-seg" title="便利貼大小">' +
+          ['sm', 'md', 'lg'].map(function (s) {
+            return '<button class="' + (a.size === s ? 'on' : '') + '" onclick="cdSetSize(\'' + a.id + '\',\'' + s + '\')">' +
+              (s === 'sm' ? '小' : s === 'md' ? '中' : '大') + '</button>';
+          }).join('') +
+        '</div>' +
+        '<button onclick="cdToggle(\'' + a.id + '\')" class="text-xs px-2 py-1 rounded-lg ' +
+          (a.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400') + '" title="顯示/隱藏便利貼">' +
+          (a.enabled ? '✓ 顯示' : '隱藏') + '</button>' +
+        '<button onclick="cdDelete(\'' + a.id + '\')" class="text-rose-400 hover:text-rose-600 text-lg leading-none px-1" title="刪除">×</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  window.cdSetSize = function (id, sz) {
+    var list = cdLoad();
+    var a = list.find(function (x) { return x.id === id; });
+    if (a) { a.size = sz; cdSave(list); renderCdSettingsBody(); renderCdNotes(); }
+  };
+  window.cdToggle = function (id) {
+    var list = cdLoad();
+    var a = list.find(function (x) { return x.id === id; });
+    if (a) { a.enabled = !a.enabled; cdSave(list); renderCdSettingsBody(); renderCdNotes(); }
+  };
+  window.cdDelete = function (id) {
+    var list = cdLoad().filter(function (x) { return x.id !== id; });
+    cdSave(list);
+    renderCdSettingsBody();
+    renderCdNotes();
+    toast("已刪除活動", "success");
+  };
+
+  /* 渲染浮動便利貼層 */
+  function renderCdNotes() {
+    var layer = document.getElementById("cdNotesLayer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.id = "cdNotesLayer";
+      document.body.appendChild(layer);
+    }
+    // 最小化膠囊列（固定底部，不擋模組）
+    var bar = document.getElementById("cdMinBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "cdMinBar";
+      document.body.appendChild(bar);
+    }
+
+    var isTeacher = !!APP_STATE.isTeacher;
+    var list = cdLoad().filter(function (a) { return a.enabled; });
+    // 依日期排序，近的在上
+    list.sort(function (a, b) { return (a.date || "").localeCompare(b.date || ""); });
+
+    if (!list.length) { layer.innerHTML = ""; bar.innerHTML = ""; return; }
+
+    var minHtml = "", noteHtml = "", autoIdx = 0;
+
+    list.forEach(function (a, i) {
+      var d = cdDaysLeft(a.date);
+      var minned = cdIsMin(a.id);
+
+      if (minned) {
+        // 最小化 → 小膠囊
+        var capNum = d === null ? "—" : d > 0 ? d : d === 0 ? "0" : "+" + (-d);
+        var capCls = d === 0 ? "cd-cap-zero" : d < 0 ? "cd-cap-past" : "";
+        minHtml += '<button class="cd-cap cd-c' + ((i % 5) + 1) + ' ' + capCls + '" ' +
+          'title="' + escHtml(a.name) + '（點擊展開）" onclick="cdToggleMin(\'' + a.id + '\')">' +
+          '<span class="cd-cap-name">' + escHtml(a.name) + '</span>' +
+          '<span class="cd-cap-num">' + capNum + '</span>' +
+        '</button>';
+        return;
+      }
+
+      var numTxt, unitTxt, stateCls = "";
+      if (d === null) { numTxt = "—"; unitTxt = ""; }
+      else if (d > 0) { numTxt = d; unitTxt = "日"; }
+      else if (d === 0) { numTxt = 0; unitTxt = "日"; stateCls = "cd-note-zero"; }
+      else { numTxt = "+" + (-d); unitTxt = "日"; stateCls = "cd-note-past"; }
+      var prefix = d === null ? "" : d > 0 ? "倒數" : d === 0 ? "就是今天" : "已過";
+
+      // 位置：有存座標→絕對定位；否則自動堆疊在右側
+      var posStyle, posCls;
+      if (typeof a.x === "number" && typeof a.y === "number") {
+        // 夾在可視範圍內，避免拖到畫面外看不到
+        var maxX = Math.max(0, window.innerWidth - 60);
+        var maxY = Math.max(0, window.innerHeight - 60);
+        var px = Math.min(Math.max(0, a.x), maxX);
+        var py = Math.min(Math.max(0, a.y), maxY);
+        posStyle = 'left:' + px + 'px;top:' + py + 'px;';
+        posCls = "cd-note-fixed";
+      } else {
+        posStyle = 'right:18px;bottom:' + (18 + autoIdx * 12) + 'px;';
+        posCls = "cd-note-auto";
+        autoIdx++;
+      }
+
+      noteHtml += '<div class="cd-note ' + cdSizeClass(a.size) + ' cd-c' + ((i % 5) + 1) + ' ' +
+          stateCls + ' ' + posCls + (isTeacher ? ' cd-draggable' : '') + '" ' +
+          'data-cdid="' + a.id + '" style="' + posStyle + '">' +
+        '<div class="cd-note-tools">' +
+          '<button class="cd-note-btn" title="放大全螢幕" onclick="cdFullscreen(\'' + a.id + '\')">⛶</button>' +
+          '<button class="cd-note-btn" title="最小化" onclick="cdToggleMin(\'' + a.id + '\')">－</button>' +
+        '</div>' +
+        '<div class="cd-note-name">' + escHtml(a.name) + '</div>' +
+        '<div class="cd-note-count">' +
+          (prefix && d !== 0 && d > 0 ? '<span class="cd-note-unit">' + prefix + '</span>' : '') +
+          '<span class="cd-note-num">' + numTxt + '</span>' +
+          '<span class="cd-note-unit">' + unitTxt + '</span>' +
+        '</div>' +
+        (d === 0 ? '<div class="cd-note-unit" style="font-weight:800">🎉 ' + prefix + '</div>' : '') +
+        '<div class="cd-note-date">📅 ' + escHtml(a.date) + '</div>' +
+        (isTeacher ? '<div class="cd-note-drag" title="拖曳移動">⠿</div>' : '') +
+      '</div>';
+    });
+
+    layer.innerHTML = noteHtml;
+    bar.innerHTML = minHtml;
+
+    // 老師：綁定拖曳
+    if (isTeacher) cdBindDrag(layer);
+  }
+  window.renderCdNotes = renderCdNotes;
+
+  /* ── 拖曳（僅老師）：滑鼠 + 觸控，放開時把座標寫入資料庫 ── */
+  function cdBindDrag(layer) {
+    var notes = layer.querySelectorAll(".cd-note.cd-draggable");
+    for (var i = 0; i < notes.length; i++) bindOne(notes[i]);
+
+    function bindOne(note) {
+      var handle = note.querySelector(".cd-note-drag") || note;
+      handle.addEventListener("mousedown", function (e) { start(e, e.clientX, e.clientY); });
+      handle.addEventListener("touchstart", function (e) {
+        if (!e.touches[0]) return;
+        start(e, e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
+
+      function start(e, cx, cy) {
+        // 不要在按到工具鈕時觸發拖曳
+        if (e.target.closest && e.target.closest(".cd-note-btn")) return;
+        e.preventDefault();
+        var rect = note.getBoundingClientRect();
+        var offX = cx - rect.left, offY = cy - rect.top;
+        note.classList.add("cd-dragging");
+        // 拖曳時改為絕對座標模式
+        note.style.left = rect.left + "px";
+        note.style.top = rect.top + "px";
+        note.style.right = "auto";
+        note.style.bottom = "auto";
+
+        function move(mx, my) {
+          var nx = Math.min(Math.max(0, mx - offX), window.innerWidth - 40);
+          var ny = Math.min(Math.max(0, my - offY), window.innerHeight - 40);
+          note.style.left = nx + "px";
+          note.style.top = ny + "px";
+        }
+        function onMouseMove(ev) { move(ev.clientX, ev.clientY); }
+        function onTouchMove(ev) { if (ev.touches[0]) { ev.preventDefault(); move(ev.touches[0].clientX, ev.touches[0].clientY); } }
+        function end() {
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", end);
+          document.removeEventListener("touchmove", onTouchMove);
+          document.removeEventListener("touchend", end);
+          note.classList.remove("cd-dragging");
+          var fx = parseInt(note.style.left, 10) || 0;
+          var fy = parseInt(note.style.top, 10) || 0;
+          cdPersistPos(note.getAttribute("data-cdid"), fx, fy);
+        }
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", end);
+        document.addEventListener("touchmove", onTouchMove, { passive: false });
+        document.addEventListener("touchend", end);
+      }
+    }
+  }
+
+  function cdPersistPos(id, x, y) {
+    var list = cdLoad();
+    var a = list.find(function (x2) { return x2.id === id; });
+    if (!a) return;
+    a.x = x; a.y = y;
+    cdSave(list);   // 寫入資料庫 → 家長端 onSnapshot 會同步看到新位置
+  }
+
+  /* 全螢幕顯示單一活動倒數 */
+  window.cdFullscreen = function (id) {
+    var a = cdLoad().find(function (x) { return x.id === id; });
+    if (!a) return;
+    var d = cdDaysLeft(a.date);
+    var numTxt, unitTxt, cls = "", caption;
+    if (d === null) { numTxt = "—"; unitTxt = ""; caption = ""; }
+    else if (d > 0) { numTxt = d; unitTxt = "天"; caption = "倒數"; }
+    else if (d === 0) { numTxt = 0; unitTxt = "天"; cls = "cd-zero"; caption = "🎉 就是今天！"; }
+    else { numTxt = -d; unitTxt = "天"; cls = "cd-past"; caption = "已經過了"; }
+
+    var overlay = document.createElement("div");
+    overlay.id = "cdFsOverlay";
+    overlay.className = "cd-fs";
+    overlay.innerHTML =
+      '<button class="cd-fs-close" onclick="cdCloseFs()" title="關閉">✕</button>' +
+      '<div class="cd-fs-inner">' +
+        '<div class="cd-fs-name">' + escHtml(a.name) + '</div>' +
+        (caption ? '<div class="cd-fs-unit">' + caption + '</div>' : '') +
+        '<div class="cd-fs-num ' + cls + '">' + numTxt + '</div>' +
+        '<div class="cd-fs-unit">' + unitTxt + '</div>' +
+        '<div class="cd-fs-date">📅 活動日期：' + escHtml(a.date) + '</div>' +
+      '</div>';
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) cdCloseFs(); });
+    document.body.appendChild(overlay);
+  };
+  window.cdCloseFs = function () {
+    var o = document.getElementById("cdFsOverlay");
+    if (o) o.remove();
+  };
+
+  /* 跨日自動更新：每分鐘檢查日期是否改變，變了就重繪 */
+  var cdLastDay = new Date().toDateString();
+  function cdStartAutoRefresh() {
+    setInterval(function () {
+      var now = new Date().toDateString();
+      if (now !== cdLastDay) {
+        cdLastDay = now;
+        renderCdNotes();
+      }
+    }, 60000);
+  }
+
   /* ── 曝光 ── */
   window.setupTools   = setupTools;
   window.renderTools  = renderTools;
+
+  /* 進場後渲染便利貼（無論老師或登入皆顯示已啟用的活動） */
+  (function cdBoot() {
+    function go() {
+      try {
+        renderCdNotes();
+        cdStartAutoRefresh();
+        // 視窗大小改變時重繪，讓便利貼保持在可視範圍內
+        var rt;
+        window.addEventListener("resize", function () {
+          clearTimeout(rt);
+          rt = setTimeout(function () { try { renderCdNotes(); } catch (e) {} }, 200);
+        });
+      } catch (e) {}
+    }
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", function () { setTimeout(go, 300); });
+    else setTimeout(go, 300);
+  })();
 
 })();
