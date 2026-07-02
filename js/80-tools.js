@@ -929,6 +929,164 @@
     }, 60000);
   }
 
+  /* ══════════════════════════════════════════
+     文字跑馬燈
+  ══════════════════════════════════════════ */
+
+  /* 設定暫存於 localStorage（純顯示用途，方便下次沿用），依班級分隔 */
+  function mqStoreKey() {
+    var cls = "";
+    try { if (window.LocalDB && LocalDB.getActiveClassId) cls = LocalDB.getActiveClassId() || ""; } catch (e) {}
+    return "TOOLS_marquee_" + (cls || "default");
+  }
+  function mqLoadCfg() {
+    var def = { text: "", color: "#ffeb3b", size: 48, speed: 12, infinite: true, repeat: 3 };
+    try {
+      var s = JSON.parse(localStorage.getItem(mqStoreKey()) || "null");
+      return s ? Object.assign(def, s) : def;
+    } catch (e) { return def; }
+  }
+  function mqSaveCfg(cfg) {
+    try { localStorage.setItem(mqStoreKey(), JSON.stringify(cfg)); } catch (e) {}
+  }
+
+  /* 打開跑馬燈設定視窗（限老師） */
+  window.openMarquee = function () {
+    if (!checkTeacher()) return;
+    var cfg = mqLoadCfg();
+    showModal(buildMarqueeHtml(cfg), { size: "max-w-md", noBackdropClose: false });
+    // 綁定「無限次」勾選 → 停用次數輸入
+    var inf = document.getElementById("mqInfinite");
+    var rep = document.getElementById("mqRepeat");
+    if (inf && rep) {
+      var sync = function () { rep.disabled = inf.checked; rep.style.opacity = inf.checked ? ".4" : "1"; };
+      inf.addEventListener("change", sync);
+      sync();
+    }
+    // 即時預覽字級/顏色
+    var sizeEl = document.getElementById("mqSize");
+    var sizeVal = document.getElementById("mqSizeVal");
+    if (sizeEl && sizeVal) sizeEl.addEventListener("input", function () { sizeVal.textContent = sizeEl.value + " px"; });
+    var spdEl = document.getElementById("mqSpeed");
+    var spdVal = document.getElementById("mqSpeedVal");
+    if (spdEl && spdVal) spdEl.addEventListener("input", function () { spdVal.textContent = mqSpeedLabel(+spdEl.value); });
+  };
+
+  function mqSpeedLabel(v) {
+    // v = 每次穿越畫面所需秒數；秒數越小越快
+    return v <= 6 ? "很快" : v <= 10 ? "快" : v <= 16 ? "適中" : v <= 24 ? "慢" : "很慢";
+  }
+
+  function buildMarqueeHtml(cfg) {
+    return '<div class="flex flex-col" style="max-height:90vh">' +
+      '<div class="px-6 py-4 border-b flex items-center justify-between shrink-0">' +
+        '<h3 class="text-lg font-bold flex items-center gap-2">📢 文字跑馬燈</h3>' +
+        '<button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>' +
+      '</div>' +
+      '<div class="px-6 py-4 overflow-y-auto space-y-4">' +
+        /* 文字內容 */
+        '<div>' +
+          '<label class="text-xs font-bold text-slate-500 block mb-1">跑馬燈文字（可多行）</label>' +
+          '<textarea id="mqText" rows="3" class="w-full border rounded-xl px-3 py-2 text-sm" ' +
+            'placeholder="請輸入要跑的文字…&#10;可換行輸入多行">' + escHtml(cfg.text || "") + '</textarea>' +
+        '</div>' +
+        /* 顏色 + 字級 */
+        '<div class="flex items-center gap-4 flex-wrap">' +
+          '<div class="flex items-center gap-2">' +
+            '<label class="text-xs font-bold text-slate-500">字體顏色</label>' +
+            '<input type="color" id="mqColor" value="' + escHtml(cfg.color) + '" class="w-10 h-8 rounded cursor-pointer border">' +
+          '</div>' +
+          '<div class="flex items-center gap-2 flex-1 min-w-[180px]">' +
+            '<label class="text-xs font-bold text-slate-500 shrink-0">字級</label>' +
+            '<input type="range" id="mqSize" min="20" max="120" step="2" value="' + cfg.size + '" class="flex-1">' +
+            '<span id="mqSizeVal" class="text-xs text-slate-500 w-14 text-right">' + cfg.size + ' px</span>' +
+          '</div>' +
+        '</div>' +
+        /* 速度 */
+        '<div class="flex items-center gap-2">' +
+          '<label class="text-xs font-bold text-slate-500 shrink-0">捲動速度</label>' +
+          '<input type="range" id="mqSpeed" min="4" max="30" step="1" value="' + cfg.speed + '" class="flex-1" ' +
+            'title="數字越小越快">' +
+          '<span id="mqSpeedVal" class="text-xs text-slate-500 w-12 text-right">' + mqSpeedLabel(cfg.speed) + '</span>' +
+        '</div>' +
+        /* 次數 */
+        '<div class="flex items-center gap-3 flex-wrap">' +
+          '<label class="text-xs font-bold text-slate-500 shrink-0">出現次數</label>' +
+          '<label class="flex items-center gap-1.5 text-sm cursor-pointer select-none">' +
+            '<input type="checkbox" id="mqInfinite" class="w-4 h-4 rounded accent-pink-600" ' +
+              (cfg.infinite ? "checked" : "") + '>' +
+            '<span>無限次</span>' +
+          '</label>' +
+          '<div class="flex items-center gap-1.5">' +
+            '<input type="number" id="mqRepeat" min="1" max="999" value="' + (cfg.repeat || 3) + '" ' +
+              'class="w-20 border rounded-xl px-2 py-1.5 text-sm text-center">' +
+            '<span class="text-sm text-slate-500">次</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="px-6 py-4 border-t flex gap-3 justify-end shrink-0">' +
+        '<button onclick="closeModal()" class="btn3d b-slate text-sm">取消</button>' +
+        '<button onclick="startMarquee()" class="btn3d b-rose text-sm">▶ 開始跑馬燈</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* 開始播放 */
+  window.startMarquee = function () {
+    var text = (document.getElementById("mqText").value || "").replace(/\s+$/,"");
+    if (!text.trim()) { toast("請先輸入跑馬燈文字", "warn"); return; }
+    var color = document.getElementById("mqColor").value || "#ffeb3b";
+    var size = parseInt(document.getElementById("mqSize").value, 10) || 48;
+    var speed = parseInt(document.getElementById("mqSpeed").value, 10) || 12;
+    var infinite = document.getElementById("mqInfinite").checked;
+    var repeat = Math.max(1, parseInt(document.getElementById("mqRepeat").value, 10) || 1);
+
+    var cfg = { text: text, color: color, size: size, speed: speed, infinite: infinite, repeat: repeat };
+    mqSaveCfg(cfg);
+    closeModal();
+    runMarquee(cfg);
+  };
+
+  function runMarquee(cfg) {
+    stopMarquee(); // 先清掉舊的
+
+    var layer = document.createElement("div");
+    layer.id = "marqueeLayer";
+    var textEl = document.createElement("div");
+    textEl.id = "marqueeText";
+    // 多行 → 每行一個 block
+    var lines = cfg.text.split(/\r?\n/);
+    textEl.innerHTML = lines.map(function (ln) {
+      return '<span class="mq-line">' + (escHtml(ln) || "&nbsp;") + '</span>';
+    }).join("");
+    textEl.style.color = cfg.color;
+    textEl.style.fontSize = cfg.size + "px";
+    textEl.style.animationDuration = cfg.speed + "s";
+    // 無限 → infinite；有限 → 直接交給 CSS 計數，跑完自動觸發 animationend
+    textEl.style.animationIterationCount = cfg.infinite ? "infinite" : String(cfg.repeat);
+    layer.appendChild(textEl);
+    document.body.appendChild(layer);
+
+    // 浮動關閉按鈕
+    var btn = document.createElement("button");
+    btn.id = "marqueeCloseBtn";
+    btn.innerHTML = "✕ 關閉跑馬燈";
+    btn.onclick = stopMarquee;
+    document.body.appendChild(btn);
+
+    // 有限次數：全部跑完後自動結束
+    if (!cfg.infinite) {
+      textEl.addEventListener("animationend", stopMarquee);
+    }
+  }
+
+  window.stopMarquee = function () {
+    var l = document.getElementById("marqueeLayer");
+    if (l) l.remove();
+    var b = document.getElementById("marqueeCloseBtn");
+    if (b) b.remove();
+  };
+
   /* ── 曝光 ── */
   window.setupTools   = setupTools;
   window.renderTools  = renderTools;

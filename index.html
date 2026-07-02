@@ -306,6 +306,8 @@
   .tools-btn-timer  { background: linear-gradient(145deg, #e0f2fe, #bae6fd); }
   .tools-btn-countdown { background: linear-gradient(145deg, #fef9c3, #fde68a); }
   .tools-btn-countdown .tc-sub { color: #b45309; }
+  .tools-btn-marquee { background: linear-gradient(145deg, #fce7f3, #fbcfe8); }
+  .tools-btn-marquee .tc-sub { color: #be185d; }
 
   /* ── 抽人 ── */
   .tools-pick-result {
@@ -660,6 +662,65 @@
     .cd-note.cd-lg .cd-note-num { font-size: 3.8rem; }
     #cdMinBar { bottom: 8px; }
   }
+
+  /* ════════ 文字跑馬燈 ════════ */
+  /* 固定條：畫面上下置中，滿版寬度，本身不攔截點擊（老師仍可操作頁面） */
+  #marqueeLayer {
+    position: fixed;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    transform: translateY(-50%);
+    z-index: 150;
+    pointer-events: none;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+  }
+  /* 跑動的文字：起始在畫面右外側，向左捲出畫面左外側 */
+  #marqueeText {
+    display: inline-block;
+    white-space: nowrap;
+    will-change: transform;
+    font-weight: 900;
+    line-height: 1.25;
+    padding: 6px 0;
+    text-shadow: 0 2px 10px rgba(0,0,0,.28), 0 0 2px rgba(255,255,255,.35);
+    animation-name: marqueeMove;
+    animation-timing-function: linear;
+    animation-iteration-count: 1;
+  }
+  @keyframes marqueeMove {
+    from { transform: translateX(100vw); }
+    to   { transform: translateX(-100%); }
+  }
+  /* 多行文字：保留換行、置中對齊 */
+  #marqueeText .mq-line { display: block; text-align: center; }
+
+  /* 浮動「關閉跑馬燈」小按鈕 */
+  #marqueeCloseBtn {
+    position: fixed;
+    right: 16px;
+    top: 16px;
+    z-index: 151;
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .82);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(0,0,0,.3);
+    backdrop-filter: blur(4px);
+    transition: background .15s, transform .1s;
+  }
+  #marqueeCloseBtn:hover { background: rgba(220, 38, 38, .92); }
+  #marqueeCloseBtn:active { transform: scale(.94); }
 
   /* 全螢幕倒數 */
   .cd-fs {
@@ -1111,6 +1172,12 @@
               <span class="tc-icon">📌</span>
               <span class="tc-label">活動倒數</span>
               <span class="tc-sub">便利貼浮動顯示</span>
+            </button>
+            <!-- 文字跑馬燈 -->
+            <button onclick="openMarquee()" class="tools-card-btn tools-btn-marquee">
+              <span class="tc-icon">📢</span>
+              <span class="tc-label">文字跑馬燈</span>
+              <span class="tc-sub">畫面橫向捲動</span>
             </button>
           </div>
         </div>
